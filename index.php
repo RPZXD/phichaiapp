@@ -1,24 +1,54 @@
 <?php 
-// Read configuration from JSON file
-$config = json_decode(file_get_contents('config.json'), true);
-$global = $config['global'];
 
 require_once('header.php');
+require_once('config/Setting.php');
 
+date_default_timezone_set('Asia/Bangkok');
 ?>
-<body class="hold-transition sidebar-mini layout-fixed light-mode">
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><?php echo $setting->getPageTitle(); ?></title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          animation: {
+            shake: 'shake 1s infinite',
+          },
+          keyframes: {
+            shake: {
+              '0%, 100%': { transform: 'translateX(0)' },
+              '10%, 30%, 50%, 70%, 90%': { transform: 'translateX(-5px)' },
+              '20%, 40%, 60%, 80%': { transform: 'translateX(5px)' },
+            },
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    .animate-shake { animation: shake 1s infinite; }
+  </style>
+</head>
+<body class="hold-transition sidebar-mini layout-fixed bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
 <div class="wrapper">
 
     <?php require_once('wrapper.php');?>
 
   <!-- Content Wrapper. Contains page content -->
-  <div class="content-wrapper">
+  <div class="content-wrapper bg-white dark:bg-gray-800 min-h-screen transition-colors duration-300">
 
   <div class="content-header">
       <div class="container-fluid">
         <div class="row mb-2">
           <div class="col-sm-6">
-            <h1 class="m-0"><?php echo $global['nameschool']; ?></h1>
+            <h1 class="m-0 text-2xl font-bold flex items-center">🌟 ยินดีต้อนรับสู่ระบบสารสนเทศโรงเรียนพิชัย</h1>
           </div>
         </div>
       </div>
@@ -26,54 +56,46 @@ require_once('header.php');
     <!-- /.content-header -->
 
     <section class="content">
-  <div class="flex flex-col items-center justify-center min-h-[60vh] bg-gradient-to-br from-blue-50 via-white to-indigo-100 rounded-lg shadow-2xl p-10 mx-auto max-w-2xl border border-blue-200">
-    <div class="text-7xl mb-4 animate-bounce">🎓✨</div>
-    <h2 class="text-4xl font-extrabold text-indigo-700 mb-4 text-center drop-shadow-lg tracking-wide">
-      ระบบบริหารงานทั่วไป
-    </h2>
-    <p class="text-lg text-gray-700 mb-6 text-center">
-      <span class="inline-block animate-pulse">👋</span>
-      ยินดีต้อนรับสู่ระบบบริหารงานทั่วไป
-      <span class="font-semibold text-blue-700"><?php echo $global['nameschool']; ?></span>!
-      <br>
-      <span class="text-base text-gray-500">ระบบนี้ประกอบด้วยฟังก์ชันหลัก:</span>
-    </p>
-    <ul class="list-none w-full max-w-md mb-6 space-y-4">
-      <li class="flex items-center bg-white rounded-lg shadow hover:shadow-lg transition p-4 border-l-4 border-blue-400 group">
-        <span class="text-3xl mr-4 group-hover:scale-125 transition-transform">📋</span>
-        <div>
-          <span class="font-bold text-blue-700">แจ้งซ่อม</span>
-          <span class="block text-gray-600 text-sm">แจ้งปัญหาและติดตามสถานะการซ่อมแซม</span>
+      <div class="container-fluid">
+        <!-- Section: เลือกฝ่ายงาน 4 ฝ่าย -->
+        <div class="container mx-auto mt-8 mb-8">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <!-- ฝ่ายวิชาการ -->
+            <a href="#" class="group block rounded-2xl shadow-xl bg-gradient-to-br from-indigo-400 to-indigo-600 dark:from-indigo-700 dark:to-indigo-900 text-white p-6 text-center transform transition hover:scale-105 hover:shadow-2xl hover:from-indigo-500 hover:to-indigo-700 duration-200">
+              <div class="flex flex-col items-center">
+                <span class="text-5xl mb-2 animate-bounce">📚</span>
+                <div class="text-xl font-bold mb-1">ฝ่ายวิชาการ</div>
+                <div class="text-sm opacity-80">ระบบสารสนเทศ, ตารางเรียน, ผลการเรียน</div>
+              </div>
+            </a>
+            <!-- ฝ่ายกิจการนักเรียน -->
+            <a href="#" class="group block rounded-2xl shadow-xl bg-gradient-to-br from-pink-400 to-pink-600 dark:from-pink-700 dark:to-pink-900 text-white p-6 text-center transform transition hover:scale-105 hover:shadow-2xl hover:from-pink-500 hover:to-pink-700 duration-200">
+              <div class="flex flex-col items-center">
+                <span class="text-5xl mb-2 animate-bounce">🎒</span>
+                <div class="text-xl font-bold mb-1">ฝ่ายกิจการนักเรียน</div>
+                <div class="text-sm opacity-80">ระบบเช็คชื่อ, พฤติกรรม, กิจกรรม</div>
+              </div>
+            </a>
+            <!-- ฝ่ายบริหารทั่วไป -->
+            <a href="#" class="group block rounded-2xl shadow-xl bg-gradient-to-br from-green-400 to-green-600 dark:from-green-700 dark:to-green-900 text-white p-6 text-center transform transition hover:scale-105 hover:shadow-2xl hover:from-green-500 hover:to-green-700 duration-200">
+              <div class="flex flex-col items-center">
+                <span class="text-5xl mb-2 animate-bounce">🏫</span>
+                <div class="text-xl font-bold mb-1">ฝ่ายบริหารทั่วไป</div>
+                <div class="text-sm opacity-80">งานธุรการ, บุคลากร, อาคารสถานที่</div>
+              </div>
+            </a>
+            <!-- ฝ่ายงบประมาณ -->
+            <a href="#" class="group block rounded-2xl shadow-xl bg-gradient-to-br from-yellow-400 to-yellow-600 dark:from-yellow-700 dark:to-yellow-900 text-white p-6 text-center transform transition hover:scale-105 hover:shadow-2xl hover:from-yellow-500 hover:to-yellow-700 duration-200">
+              <div class="flex flex-col items-center">
+                <span class="text-5xl mb-2 animate-bounce">💰</span>
+                <div class="text-xl font-bold mb-1">ฝ่ายงบประมาณ</div>
+                <div class="text-sm opacity-80">งบประมาณ, พัสดุ, การเงิน</div>
+              </div>
+            </a>
+          </div>
         </div>
-      </li>
-      <li class="flex items-center bg-white rounded-lg shadow hover:shadow-lg transition p-4 border-l-4 border-indigo-400 group">
-        <span class="text-3xl mr-4 group-hover:scale-125 transition-transform">🏢</span>
-        <div>
-          <span class="font-bold text-indigo-700">จองห้องประชุม</span>
-          <span class="block text-gray-600 text-sm">ตรวจสอบและจองห้องประชุมได้อย่างสะดวก</span>
-        </div>
-      </li>
-      <li class="flex items-center bg-white rounded-lg shadow hover:shadow-lg transition p-4 border-l-4 border-green-400 group">
-        <span class="text-3xl mr-4 group-hover:scale-125 transition-transform">🚗</span>
-        <div>
-          <span class="font-bold text-green-700">จองรถ</span>
-          <span class="block text-gray-600 text-sm">จองรถสำหรับภารกิจต่าง ๆ ของโรงเรียน</span>
-        </div>
-      </li>
-    </ul>
-    <div class="mb-8">
-      <img src="dist/img/logo-phicha.png" alt="<?php echo $global['nameschool']; ?> Logo"
-        class="max-h-32 mx-auto rounded-full shadow-lg border-4 border-indigo-200 hover:scale-105 transition-transform duration-300">
-    </div>
-    <a href="login.php"
-      class="inline-block bg-gradient-to-r from-blue-600 to-indigo-500 hover:from-indigo-600 hover:to-blue-700 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:scale-105 transition-all duration-200 text-xl tracking-wide animate-pulse">
-      🚀 เริ่มต้นใช้งาน
-    </a>
-    <div class="mt-8 text-center text-gray-400 text-xs animate-fade-in">
-      <span class="mr-1">🤝</span> Powered by General Management System <span class="ml-1">🎉</span>
-    </div>
-  </div>
-</section>
+      </div><!-- /.container-fluid -->
+    </section>
     <!-- /.content -->
   </div>
   <!-- /.content-wrapper -->
@@ -81,10 +103,51 @@ require_once('header.php');
 </div>
 <!-- ./wrapper -->
 
+<!-- DataTables CSS/JS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/plug-ins/1.13.7/i18n/th.json"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<script>
-
-</script>
 <?php require_once('script.php');?>
+<script>
+// Hamburger menu toggle
+const hamburgerBtn = document.getElementById('hamburger-btn');
+const sidebar = document.getElementById('sidebar');
+const sidebarOverlay = document.getElementById('sidebar-overlay');
+if(hamburgerBtn && sidebar && sidebarOverlay) {
+  hamburgerBtn.addEventListener('click', () => {
+    sidebar.classList.toggle('-translate-x-full');
+    sidebarOverlay.classList.toggle('hidden');
+  });
+  sidebarOverlay.addEventListener('click', () => {
+    sidebar.classList.add('-translate-x-full');
+    sidebarOverlay.classList.add('hidden');
+  });
+}
+// Theme toggle
+const themeToggle = document.getElementById('theme-toggle');
+const htmlEl = document.documentElement;
+if(themeToggle) {
+  // Initial
+  if(localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    htmlEl.classList.add('dark');
+    themeToggle.checked = true;
+  } else {
+    htmlEl.classList.remove('dark');
+    themeToggle.checked = false;
+  }
+  themeToggle.addEventListener('change', function() {
+    if(this.checked) {
+      htmlEl.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      htmlEl.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  });
+}
+</script>
 </body>
 </html>

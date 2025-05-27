@@ -1,63 +1,74 @@
 <?php
+// models/User.php
+require_once __DIR__ . '/../config/Database.php';
 
-require_once __DIR__ . '/../classes/DatabaseUsers.php';
-
-class User
-{
-    // เพิ่ม mapping สำหรับ role ที่อนุญาต
-    private static $allowedUserRoles = [
-        'ครู' => ['T', 'ADM', 'VP', 'OF', 'DIR', 'HOD'],
-        'เจ้าหน้าที่' => ['ADM', 'OF'],
-        'ผู้บริหาร' => ['VP', 'DIR', 'ADM'],
-        'admin' => ['ADM'],
-        // เพิ่มนักเรียน
-        'นักเรียน' => ['STU']
-    ];
-
-    public static function authenticate($username, $password, $role)
-    {
-        $db = new \App\DatabaseUsers();
-
-        if ($role === 'นักเรียน') {
-            $student = $db->getStudentByUsername($username);
-            if ($student) {
-                // ถ้า Stu_password ว่าง ให้ return 'change_password'
-                if (empty($student['Stu_password'])) {
-                    return 'change_password';
-                }
-                // เปรียบเทียบรหัสผ่าน (plain text)
-                if ($password === $student['Stu_password']) {
-                    // เพิ่ม role_general = 'STU' เพื่อความสอดคล้อง
-                    $student['role_general'] = 'STU';
-                    return $student;
-                }
-            }
+class User {
+    private $db;
+    public function __construct() {
+        $this->db = new \App\Database();
+    }
+    public function findByUsernameOrEmail($usernameOrEmail) {
+        $sql = "SELECT * FROM users WHERE username = ? OR email = ? LIMIT 1";
+        $stmt = $this->db->query($sql, [$usernameOrEmail, $usernameOrEmail]);
+        return $stmt->fetch();
+    }
+    public function verifyPassword($user, $password) {
+        // ป้องกัน error หาก password_hash ในฐานข้อมูลเป็น null หรือว่าง
+        if (!isset($user['password_hash']) || empty($user['password_hash'])) {
             return false;
         }
-
-        $user = $db->getTeacherByUsername($username);
-
-        if ($user) {
-            // ถ้า password ว่าง ให้ return 'change_password'
-            if (empty($user['password'])) {
-                return 'change_password';
-            }
-            if (
-                password_verify($password, $user['password']) &&
-                self::roleMatch($user['role_general'], $role)
-            ) {
-                return $user;
-            }
-        }
-        return false;
+        return password_verify($password, $user['password_hash']);
+    }    public function getAllUsers() {
+        $sql = "SELECT user_id, username, email, role, phone_number, created_at, updated_at FROM users ORDER BY created_at DESC";
+        $stmt = $this->db->query($sql);
+        return $stmt->fetchAll();
     }
 
-    // ตรวจสอบว่า role_general ของ user อยู่ในกลุ่ม role ที่เลือก
-    private static function roleMatch($role_general, $role)
-    {
-        if (!isset(self::$allowedUserRoles[$role])) {
-            return false;
+    public function getUserById($id) {
+        $sql = "SELECT user_id, username, email, role, phone_number, created_at, updated_at FROM users WHERE user_id = ? LIMIT 1";
+        $stmt = $this->db->query($sql, [$id]);
+        return $stmt->fetch();
+    }
+
+    public function createUser($data) {
+        $passwordHash = password_hash($data['password'], PASSWORD_DEFAULT);
+        $sql = "INSERT INTO users (username, email, password_hash, role, phone_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())";
+        $stmt = $this->db->query($sql, [
+            $data['username'],
+            $data['email'],
+            $passwordHash,
+            $data['role'],
+            $data['phone_number'] ?? null
+        ]);
+        return $stmt->rowCount() > 0;
+    }
+
+    public function updateUser($id, $data) {
+        if (isset($data['password']) && !empty($data['password'])) {
+            $data['password_hash'] = password_hash($data['password'], PASSWORD_DEFAULT);
+            $sql = "UPDATE users SET username = ?, email = ?, password_hash = ?, role = ?, phone_number = ?, updated_at = NOW() WHERE user_id = ?";
+            $params = [$data['username'], $data['email'], $data['password_hash'], $data['role'], $data['phone_number'], $id];
+        } else {
+            $sql = "UPDATE users SET username = ?, email = ?, role = ?, phone_number = ?, updated_at = NOW() WHERE user_id = ?";
+            $params = [$data['username'], $data['email'], $data['role'], $data['phone_number'], $id];
         }
-        return in_array($role_general, self::$allowedUserRoles[$role]);
+        $stmt = $this->db->query($sql, $params);
+        return $stmt->rowCount() > 0;
+    }    public function deleteUser($id) {
+        $sql = "DELETE FROM users WHERE user_id = ?";
+        $stmt = $this->db->query($sql, [$id]);
+        return $stmt->rowCount() > 0;
+    }
+
+    public function findById($id) {
+        $sql = "SELECT * FROM users WHERE user_id = ? LIMIT 1";
+        $stmt = $this->db->query($sql, [$id]);
+        return $stmt->fetch();
+    }
+
+    public function updatePassword($userId, $hashedPassword) {
+        $sql = "UPDATE users SET password_hash = ?, force_password_change = 0, last_password_change = NOW(), updated_at = NOW() WHERE user_id = ?";
+        $stmt = $this->db->query($sql, [$hashedPassword, $userId]);
+        return $stmt->rowCount() > 0;
     }
 }

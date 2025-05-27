@@ -1,199 +1,101 @@
 <?php
-session_start();
+ob_start(); // Start output buffering
+require_once('header.php');
+require_once(__DIR__ . '/controllers/AuthController.php');
 
-// โหลด config
-$config = json_decode(file_get_contents(__DIR__ . '/config.json'), true);
-$pageConfig = $config['global'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['signin'])) {
+    $username = trim($_POST['txt_username_email'] ?? '');
+    $password = trim($_POST['txt_password'] ?? '');
+    $auth = new AuthController();
+    $result = $auth->login($username, $password);
+    if ($result['success']) {
+        // Check if force password change is required
+        if (isset($result['force_password_change']) && $result['force_password_change']) {
+            $_SESSION['temp_user'] = [
+                'user_id' => $result['user_id'],
+                'username' => $result['username']
+            ];
+            header('Location: change_password.php?force=1');
+            exit();
+        }
+        
+        $_SESSION['jwt'] = $result['token'];
+        $_SESSION['user'] = $result['user'];
+        $role = strtolower($result['user']['role']);
+        // Toast success
+        echo '<div id="toast-success" class="fixed top-20 right-4 z-[9999] flex items-center w-full max-w-xs p-4 mb-4 text-gray-900 bg-green-100 rounded-lg shadow dark:text-gray-200 dark:bg-green-800 animate-fade-in">
+        <svg class="w-6 h-6 text-green-500 dark:text-green-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        <div class="ml-3 text-sm font-normal">เข้าสู่ระบบสำเร็จ กำลังเปลี่ยนหน้า...</div></div>';
+        // redirect ทุก role ไปหน้าเดียวกัน (index.php)
+        $redirectUrl = 'view/index.php';
+        echo '<script>setTimeout(function(){ window.location.href = "' . $redirectUrl . '"; }, 1200);</script>';
+        exit();
+    } else {
+        $loginError = $result['message'];
+    }
+}
 
-// เพิ่ม: เรียกใช้ LoginController
-require_once __DIR__ . '/controllers/LoginController.php';
-
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $input_username = $_POST['username'];
-    $input_password = $_POST['password'];
-    $input_role = $_POST['role'];
-
-    $controller = new LoginController();
-    $error = $controller->login($input_username, $input_password, $input_role);
+if (isset($_GET['logout']) && $_GET['logout'] == '1') {
+    echo '<div id="toast-logout" class="fixed top-20 right-4 z-[9999] flex items-center w-full max-w-xs p-4 mb-4 text-gray-900 bg-yellow-100 rounded-lg shadow dark:text-gray-200 dark:bg-yellow-800 animate-fade-in">
+        <svg class="w-6 h-6 text-yellow-500 dark:text-yellow-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7"></path></svg>
+        <div class="ml-3 text-sm font-normal">ออกจากระบบเรียบร้อยแล้ว</div></div>';
+    echo '<script>setTimeout(function(){ var t=document.getElementById("toast-logout"); if(t)t.remove(); }, 2500);</script>';
 }
 ?>
-
-<!DOCTYPE html>
-<html lang="th">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars($pageConfig['pageTitle']); ?></title>
-    <link rel="icon" type="image/png" href="<?php echo htmlspecialchars($pageConfig['logoLink']); ?>" />
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <!-- Google Font: Mali -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mali:wght@200;300;400;500;600;700&display=swap">
-    <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css" rel="stylesheet">
-    <style>
-        /* เพิ่ม animation เล็กน้อย */
-        @keyframes wiggle {
-            0%, 100% { transform: rotate(-5deg);}
-            50% { transform: rotate(5deg);}
-        }
-        .wiggle {
-            animation: wiggle 1s infinite;
-        }
-        .fade-in {
-            animation: fadeIn 1.2s;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0;}
-            to { opacity: 1;}
-        }
-    </style>
-</head>
-<body class="bg-gradient-to-r from-blue-500 to-purple-600 font-sans" style="font-family: 'Mali', sans-serif;">
-    <!-- SweetAlert2 -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
-    <div class="min-h-screen flex items-center justify-center">
-        <div class="bg-white rounded-3xl shadow-2xl p-10 w-full max-w-md border-t-8 border-blue-400 fade-in" data-aos="zoom-in">
-            <div class="flex flex-col items-center mb-4">
-                <?php if (!empty($pageConfig['logoLink'])): ?>
-                    <img src="dist/img/<?php echo htmlspecialchars($pageConfig['logoLink']); ?>" alt="logo"
-                        class="h-16 w-16 mb-2 rounded-full bg-white p-1 shadow-lg border-2 border-blue-200 hover:scale-110 transition-transform duration-300 wiggle" />
-                <?php endif; ?>
-                <span class="text-blue-700 font-extrabold text-xl tracking-wide drop-shadow"><?php echo htmlspecialchars($pageConfig['nameschool']); ?></span>
-            </div>
-            <h2 class="text-3xl font-extrabold text-center text-blue-600 mb-6 tracking-wide flex items-center justify-center gap-2">
-                <span class="animate-bounce">🔐</span>
-                <?php echo htmlspecialchars($pageConfig['pageTitle']); ?>
-                <span class="animate-pulse">🌟</span>
-            </h2>
-            <?php if (isset($error) && $error !== 'success') { ?>
-                <script>
-                Swal.fire({
-                    icon: 'error',
-                    title: 'เข้าสู่ระบบไม่สำเร็จ',
-                    text: <?= json_encode($error) ?>,
-                    confirmButtonText: 'ปิด',
-                    confirmButtonColor: '#3085d6'
-                });
-                </script>
-            <?php } ?>
-            <form action="login.php" method="POST" class="space-y-5">
-                <div>
-                    <label for="username" class="block text-lg font-medium text-gray-700 mb-1">ชื่อผู้ใช้ <span class="ml-1">👤</span></label>
-                    <input type="text" name="username" id="username"
-                        class="mt-1 p-3 w-full border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm transition"
-                        placeholder="กรอกชื่อผู้ใช้" required autocomplete="username">
-                </div>
-                <div>
-                    <label for="password" class="block text-lg font-medium text-gray-700 mb-1">รหัสผ่าน <span class="ml-1">🔒</span></label>
-                    <div class="relative">
-                        <input type="password" name="password" id="password"
-                            class="mt-1 p-3 w-full border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 pr-12 shadow-sm transition"
-                            placeholder="กรอกรหัสผ่าน" required autocomplete="current-password">
-                        <button type="button" id="togglePassword" tabindex="-1"
-                            class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-blue-600 focus:outline-none"
-                            aria-label="แสดง/ซ่อนรหัสผ่าน">
-                            <svg id="eyeIcon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
-                                viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0zm-9 0a9 9 0 0118 0c0 2.21-3.582 6-9 6s-9-3.79-9-6z" />
-                            </svg>
-                        </button>
+<body class="hold-transition sidebar-mini layout-fixed bg-gradient-to-br from-primary-light via-white to-secondary-light min-h-screen">
+<div class="wrapper">
+    <?php require_once('wrapper.php');?>
+    <div class="content-wrapper">
+        <div class="content-header">
+            <div class="container-fluid">
+                <div class="row mb-2">
+                    <div class="col-sm-6">
+                        <h1 class="m-0"></h1>
                     </div>
                 </div>
-                <div>
-                    <label for="role" class="block text-lg font-medium text-gray-700 mb-1">เลือกบทบาท <span class="ml-1">🛡️</span></label>
-                    <select name="role" id="role"
-                        class="mt-1 p-3 w-full border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm transition"
-                        required>
-                        <option value="">-- เลือกบทบาท --</option>
-                        <option value="ครู" selected>👨‍🏫 ครู</option>
-                        <option value="นักเรียน">👩‍🎓 นักเรียน</option>
-                        <option value="เจ้าหน้าที่">🧑‍💼 เจ้าหน้าที่</option>
-                        <option value="ผู้บริหาร">👔 ผู้บริหาร</option>
-                        <option value="admin">🛠️ admin</option>
-                    </select>
-                </div>
-                <button type="submit"
-                    class="w-full bg-gradient-to-r from-blue-600 to-purple-500 text-white py-3 rounded-xl text-xl font-bold hover:bg-blue-700 hover:scale-105 transition-all duration-200 shadow-lg flex items-center justify-center gap-2">
-                    🚀 <span>เข้าสู่ระบบ</span>
-                </button>
-            </form>
-            <div class="mt-6 text-center">
-                <p class="text-sm text-gray-500">ยังไม่มีบัญชี? <a href="#" class="text-blue-500 hover:underline">ให้ติดต่อผู้ดูแลระบบ</a></p>
-            </div>
-            <div class="mt-8 text-center text-gray-400 text-xs animate-fade-in">
-                <span class="mr-1">🤝</span> Powered by General Management System <span class="ml-1">🎉</span>
             </div>
         </div>
+        <section class="content">
+            <div class="container-fluid">
+                <div class="row flex items-center justify-center min-h-[70vh] mt-5 bg-transparent">
+                    <div class="w-full max-w-md bg-white shadow-2xl rounded-2xl p-8 border border-primary animate-fade-in">
+                        <h2 class="text-3xl font-extrabold text-center text-primary mb-6 flex items-center justify-center gap-2 animate-fade-in-down">
+                            <span class="text-4xl">🔐</span> เข้าสู่ระบบ
+                        </h2>
+                        <?php if (!empty($loginError)): ?>
+                            <div id="toast-error" class="fixed top-20 right-4 z-[9999] flex items-center w-full max-w-xs p-4 mb-4 text-gray-900 bg-red-100 rounded-lg shadow dark:text-gray-200 dark:bg-red-800 animate-fade-in">
+                                <svg class="w-6 h-6 text-red-500 dark:text-red-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                <div class="ml-3 text-sm font-normal"><?= htmlspecialchars($loginError) ?></div>
+                                <button type="button" onclick="this.parentElement.remove()" class="ml-auto -mx-1.5 -my-1.5 bg-red-100 text-red-500 rounded-lg focus:ring-2 focus:ring-red-400 p-1.5 hover:bg-red-200 inline-flex h-8 w-8 dark:bg-red-800 dark:text-red-200 dark:hover:bg-red-700" aria-label="Close">
+                                    <span class="sr-only">Close</span>
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                                </button>
+                            </div>
+                            <script>setTimeout(function(){ var t=document.getElementById('toast-error'); if(t)t.remove(); }, 3500);</script>
+                        <?php endif; ?>
+                        <form action="" method="POST" class="space-y-5">
+                            <div>
+                                <label class="block text-gray-600 mb-1 font-semibold flex items-center gap-1">👤 ชื่อผู้ใช้งาน</label>
+                                <input type="text" name="txt_username_email" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:outline-none transition-all duration-200 shadow-sm" placeholder="กรุณากรอกชื่อผู้ใช้งาน...">
+                            </div>
+                            <div>
+                                <label class="block text-gray-600 mb-1 font-semibold flex items-center gap-1">🔑 รหัสผ่าน</label>
+                                <input type="password" name="txt_password" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:outline-none transition-all duration-200 shadow-sm" placeholder="กรุณากรอกรหัสผ่าน...">
+                            </div>
+                            <button type="submit" name="signin" class="w-full bg-gradient-to-r from-primary to-secondary text-white p-3 rounded-lg hover:from-primary-dark hover:to-secondary-dark shadow-lg font-bold text-lg flex items-center justify-center gap-2 transition-all duration-200 animate-bounce-in">
+                                🚀 เข้าสู่ระบบ
+                            </button>
+                        </form>
+                        <div class="mt-6 text-center text-gray-400 text-xs animate-fade-in">
+                            © <?= date('Y') ?> โรงเรียนพิชัย | ระบบดูแลช่วยเหลือนักเรียน
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
     </div>
-    <footer class="w-full text-center text-white text-xs mt-8 mb-2">
-        <p>&copy; <?=date('Y')?> <?php echo htmlspecialchars($pageConfig['nameschool']); ?>. All rights reserved. | <?php echo htmlspecialchars($pageConfig['footerCredit']); ?></p>
-    </footer>
-
-    <!-- AOS (Animate On Scroll) script initialization -->
-    <script>
-        AOS.init({
-            duration: 1200,  // Time of animation
-            easing: 'ease-out-back',  // Easing function for smooth transition
-        });
-    </script>
-
-    <!-- sweetalert2 script initialization -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script>
-    // Show SweetAlert2 on successful logout
-    <?php if (isset($_GET['logout']) && $_GET['logout'] == '1') { ?>
-        Swal.fire({
-            icon: 'success',
-            title: 'ออกจากระบบสำเร็จ',
-            text: 'คุณได้ออกจากระบบเรียบร้อยแล้ว',
-            confirmButtonText: 'ตกลง',
-            confirmButtonColor: '#3085d6'
-        });
-    <?php } ?>
-
-    // Show SweetAlert2 on successful login (redirect after login)
-    <?php if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($error) && $error === 'success') { ?>
-        Swal.fire({
-            icon: 'success',
-            title: 'เข้าสู่ระบบสำเร็จ',
-            text: 'กำลังเข้าสู่ระบบ...',
-            showConfirmButton: false,
-            timer: 1500
-        }).then(() => {
-            // Redirect by role
-            <?php
-            $redirect = 'dashboard.php';
-            if (isset($_POST['role']) && $_POST['role'] === 'ครู') {
-                $redirect = 'teacher/index.php';
-            } else if (isset($_POST['role']) && $_POST['role'] === 'นักเรียน') {
-                $redirect = 'student/index.php';
-            } else if (isset($_POST['role']) && $_POST['role'] === 'เจ้าหน้าที่') {
-                $redirect = 'officer/index.php';
-            }
-            ?>
-            window.location.href = <?= json_encode($redirect) ?>;
-        });
-    <?php } ?>
-    </script>
-    <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const passwordInput = document.getElementById('password');
-        const toggleBtn = document.getElementById('togglePassword');
-        const eyeIcon = document.getElementById('eyeIcon');
-        let show = false;
-        toggleBtn.addEventListener('click', function () {
-            show = !show;
-            passwordInput.type = show ? 'text' : 'password';
-            eyeIcon.innerHTML = show
-                ? `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M13.875 18.825A10.05 10.05 0 0112 19c-5.418 0-9-3.79-9-6a9 9 0 0115.584-5.991M15 12a3 3 0 11-6 0 3 3 0 016 0zm6.121 6.121l-18-18" />`
-                : `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0zm-9 0a9 9 0 0118 0c0 2.21-3.582 6-9 6s-9-3.79-9-6z" />`;
-        });
-    });
-    </script>
-
+    <?php require_once('footer.php');?>
+</div>
+<?php require_once('script.php'); ?>
 </body>
 </html>

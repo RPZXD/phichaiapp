@@ -1,47 +1,72 @@
 <?php
 session_start();
+require_once('controllers/AuthController.php');
 
-// โหลด config
-$config = json_decode(file_get_contents(__DIR__ . '/config.json'), true);
-$pageConfig = $config['global'];
+// Check if user is forced to change password
+$isForced = isset($_GET['force']) && $_GET['force'] == '1';
+$tempUser = $_SESSION['temp_user'] ?? null;
 
-require_once __DIR__ . '/classes/DatabaseUsers.php';
-
-$username = $_SESSION['change_password_user'] ?? null;
-if (!$username) {
+// If not forced change and user is not logged in, redirect to login
+if (!$isForced && !isset($_SESSION['user'])) {
     header('Location: login.php');
-    exit;
+    exit();
 }
 
-$success = null;
-$error = null;
+// If forced change but no temp user, redirect to login
+if ($isForced && !$tempUser) {
+    header('Location: login.php');
+    exit();
+}
+
+$error = '';
+$success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $new_password = $_POST['new_password'] ?? '';
-    $confirm_password = $_POST['confirm_password'] ?? '';
-
-    if (empty($new_password) || empty($confirm_password)) {
-        $error = "กรุณากรอกรหัสผ่านใหม่ทั้งสองช่อง";
-    } elseif ($new_password !== $confirm_password) {
-        $error = "รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน";
-    } elseif (strlen($new_password) < 6) {
-        $error = "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร";
+    $currentPassword = trim($_POST['current_password'] ?? '');
+    $newPassword = trim($_POST['new_password'] ?? '');
+    $confirmPassword = trim($_POST['confirm_password'] ?? '');
+    
+    // Validation
+    if (empty($newPassword) || empty($confirmPassword)) {
+        $error = 'กรุณากรอกรหัสผ่านใหม่และยืนยันรหัสผ่าน';
+    } elseif (strlen($newPassword) < 6) {
+        $error = 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร';
+    } elseif ($newPassword !== $confirmPassword) {
+        $error = 'รหัสผ่านใหม่และยืนยันรหัสผ่านไม่ตรงกัน';
     } else {
-        // อัปเดตรหัสผ่าน
-        $db = new \App\DatabaseUsers();
-        $hashed = password_hash($new_password, PASSWORD_DEFAULT);
-        $stmt = $db->query("UPDATE teacher SET password = :password WHERE Teach_id = :username OR Teach_name = :username", [
-            'password' => $hashed,
-            'username' => $username
-        ]);
-        unset($_SESSION['change_password_user']);
-        $success = "เปลี่ยนรหัสผ่านสำเร็จ! กรุณาเข้าสู่ระบบใหม่";
-        // redirect ไป login หลัง 2 วินาที
-        echo "<script>
-            setTimeout(function(){ window.location.href = 'login.php'; }, 2000);
-        </script>";
+        $auth = new AuthController();
+        
+        // For forced change, use temp user ID and don't require current password
+        if ($isForced) {
+            $userId = $tempUser['user_id'];
+            $result = $auth->changePassword($userId, $newPassword);
+        } else {
+            // For normal change, require current password
+            if (empty($currentPassword)) {
+                $error = 'กรุณากรอกรหัสผ่านปัจจุบัน';
+            } else {
+                $userId = $_SESSION['user']['user_id'];
+                $result = $auth->changePassword($userId, $newPassword, $currentPassword);
+            }
+        }
+        
+        if (isset($result) && $result['success']) {
+            if ($isForced) {
+                // Clear temp user and redirect to login
+                unset($_SESSION['temp_user']);
+                $_SESSION['password_changed'] = true;
+                header('Location: login.php?changed=1');
+                exit();
+            } else {
+                $success = $result['message'];
+            }
+        } else if (isset($result)) {
+            $error = $result['message'];
+        }
     }
 }
+
+require_once('header.php');
 ?>
 
 <!DOCTYPE html>
@@ -49,72 +74,181 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>เปลี่ยนรหัสผ่าน | <?php echo htmlspecialchars($pageConfig['pageTitle']); ?></title>
-    <link rel="icon" type="image/png" href="<?php echo htmlspecialchars($pageConfig['logoLink']); ?>" />
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mali:wght@200;300;400;500;600;700&display=swap">
-    <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css" rel="stylesheet">
+    <title>เปลี่ยนรหัสผ่าน - ระบบโรงเรียนพิชัยวิทยาคม</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap');
+        body {
+            font-family: 'Kanit', sans-serif;
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+    </style>
 </head>
-<body class="bg-gradient-to-r from-blue-500 to-purple-600 font-sans" style="font-family: 'Mali', sans-serif;">
-
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
-    <div class="min-h-screen flex items-center justify-center">
-        <div class="bg-white rounded-lg shadow-lg p-8 w-full max-w-md" data-aos="fade-up">
-            <div class="flex flex-col items-center mb-4">
-                <?php if (!empty($pageConfig['logoLink'])): ?>
-                    <img src="<?php echo htmlspecialchars($pageConfig['logoLink']); ?>" alt="logo" class="h-14 w-14 mb-2 rounded-full bg-white p-1 shadow" />
+<body class="gradient-bg min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md">
+        <div class="glass-effect rounded-2xl p-8 shadow-2xl">
+            <!-- Header -->
+            <div class="text-center mb-8">
+                <div class="mx-auto w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-lg">
+                    <i class="fas fa-key text-3xl text-blue-600"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-white mb-2">
+                    <?php echo $isForced ? 'ต้องเปลี่ยนรหัสผ่าน' : 'เปลี่ยนรหัสผ่าน'; ?>
+                </h1>
+                <?php if ($isForced): ?>
+                    <p class="text-blue-100">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        ผู้ใช้: <strong><?php echo htmlspecialchars($tempUser['username']); ?></strong>
+                    </p>
+                    <p class="text-yellow-200 text-sm mt-2">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        คุณต้องเปลี่ยนรหัสผ่านก่อนเข้าใช้งานระบบ
+                    </p>
+                <?php else: ?>
+                    <p class="text-blue-100">เปลี่ยนรหัสผ่านของคุณเพื่อความปลอดภัย</p>
                 <?php endif; ?>
-                <span class="text-blue-700 font-bold text-lg"><?php echo htmlspecialchars($pageConfig['nameschool']); ?></span>
             </div>
-            <h2 class="text-3xl font-bold text-center text-blue-600 mb-6">เปลี่ยนรหัสผ่าน 🔑</h2>
-            <span class="text-base text-red-500 ">** รหัสผ่านจะต้องประกอบไปด้วยตัวอักษรและตัวเลขอย่างน้อย 6 ตัวอักษร ** </span>
+
+            <!-- Alert Messages -->
             <?php if ($error): ?>
-                <script>
-                Swal.fire({
-                    icon: 'error',
-                    title: 'เกิดข้อผิดพลาด',
-                    text: <?= json_encode($error) ?>,
-                    confirmButtonText: 'ปิด',
-                    confirmButtonColor: '#3085d6'
-                });
-                </script>
-            <?php elseif ($success): ?>
-                <script>
-                Swal.fire({
-                    icon: 'success',
-                    title: 'สำเร็จ!',
-                    text: <?= json_encode($success) ?>,
-                    showConfirmButton: false,
-                    timer: 1800
-                });
-                </script>
+                <div class="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                    <i class="fas fa-exclamation-circle mr-2"></i>
+                    <?php echo htmlspecialchars($error); ?>
+                </div>
             <?php endif; ?>
 
-            <form action="change_password.php" method="POST">
-                <div class="mb-4">
-                    <label for="new_password" class="block text-lg font-medium text-gray-700">รหัสผ่านใหม่</label>
-                    <input type="password" name="new_password" id="new_password" class="mt-1 p-3 w-full border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกรหัสผ่านใหม่" required>
+            <?php if ($success): ?>
+                <div class="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg">
+                    <i class="fas fa-check-circle mr-2"></i>
+                    <?php echo htmlspecialchars($success); ?>
                 </div>
-                <div class="mb-6">
-                    <label for="confirm_password" class="block text-lg font-medium text-gray-700">ยืนยันรหัสผ่านใหม่</label>
-                    <input type="password" name="confirm_password" id="confirm_password" class="mt-1 p-3 w-full border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="ยืนยันรหัสผ่านใหม่" required>
+            <?php endif; ?>
+
+            <!-- Form -->
+            <form method="POST" class="space-y-6">
+                <?php if (!$isForced): ?>
+                    <!-- Current Password -->
+                    <div>
+                        <label for="current_password" class="block text-sm font-medium text-white mb-2">
+                            <i class="fas fa-lock mr-2"></i>รหัสผ่านปัจจุบัน
+                        </label>
+                        <input type="password" id="current_password" name="current_password" required
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                               placeholder="กรอกรหัสผ่านปัจจุบัน">
+                    </div>
+                <?php endif; ?>
+
+                <!-- New Password -->
+                <div>
+                    <label for="new_password" class="block text-sm font-medium text-white mb-2">
+                        <i class="fas fa-key mr-2"></i>รหัสผ่านใหม่
+                    </label>
+                    <input type="password" id="new_password" name="new_password" required
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                           placeholder="กรอกรหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)" minlength="6">
+                    <p class="text-xs text-blue-200 mt-1">รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร</p>
                 </div>
-                <button type="submit" class="w-full bg-blue-600 text-white py-3 rounded-lg text-xl font-semibold hover:bg-blue-700 transition duration-300 transform hover:scale-105">บันทึกรหัสผ่านใหม่</button>
+
+                <!-- Confirm Password -->
+                <div>
+                    <label for="confirm_password" class="block text-sm font-medium text-white mb-2">
+                        <i class="fas fa-check mr-2"></i>ยืนยันรหัสผ่านใหม่
+                    </label>
+                    <input type="password" id="confirm_password" name="confirm_password" required
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                           placeholder="กรอกรหัสผ่านใหม่อีกครั้ง">
+                </div>
+
+                <!-- Show Password Checkbox -->
+                <div class="flex items-center">
+                    <input type="checkbox" id="show_passwords" class="mr-2">
+                    <label for="show_passwords" class="text-sm text-white">แสดงรหัสผ่าน</label>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" 
+                        class="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-3 px-6 rounded-lg shadow-lg transform transition-all duration-300 hover:scale-105">
+                    <i class="fas fa-save mr-2"></i>
+                    เปลี่ยนรหัสผ่าน
+                </button>
             </form>
+
+            <!-- Footer -->
+            <?php if (!$isForced): ?>
+                <div class="mt-6 text-center">
+                    <a href="view/index.php" class="text-blue-200 hover:text-white transition-colors duration-300">
+                        <i class="fas fa-arrow-left mr-2"></i>กลับสู่หน้าหลัก
+                    </a>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 
-    <footer class="w-full text-center text-white text-xs mt-8 mb-2">
-        <p>&copy; <?=date('Y')?> <?php echo htmlspecialchars($pageConfig['nameschool']); ?>. All rights reserved. | <?php echo htmlspecialchars($pageConfig['footerCredit']); ?></p>
-    </footer>
-
+    <!-- JavaScript -->
     <script>
-        AOS.init({
-            duration: 1200,
-            easing: 'ease-out-back',
+        // Show/Hide Password Toggle
+        document.getElementById('show_passwords').addEventListener('change', function() {
+            const passwordFields = [
+                'current_password',
+                'new_password', 
+                'confirm_password'
+            ];
+            
+            passwordFields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                if (field) {
+                    field.type = this.checked ? 'text' : 'password';
+                }
+            });
         });
+
+        // Password Confirmation Validation
+        document.getElementById('confirm_password').addEventListener('input', function() {
+            const newPassword = document.getElementById('new_password').value;
+            const confirmPassword = this.value;
+            
+            if (confirmPassword && newPassword !== confirmPassword) {
+                this.setCustomValidity('รหัสผ่านไม่ตรงกัน');
+                this.style.borderColor = '#ef4444';
+            } else {
+                this.setCustomValidity('');
+                this.style.borderColor = '';
+            }
+        });
+
+        // New Password Length Validation
+        document.getElementById('new_password').addEventListener('input', function() {
+            if (this.value.length > 0 && this.value.length < 6) {
+                this.setCustomValidity('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+                this.style.borderColor = '#ef4444';
+            } else {
+                this.setCustomValidity('');
+                this.style.borderColor = '';
+            }
+        });
+        const togglePasswordButton = document.getElementById('togglePassword');
+const eyeIcon = document.getElementById('eyeIcon');
+
+togglePasswordButton.addEventListener('click', () => {
+  const isPassword = passwordInput.type === 'password';
+  passwordInput.type = isPassword ? 'text' : 'password';
+  eyeIcon.setAttribute('d', isPassword
+      ? 'M12 4.5c-4.477 0-8.268 2.943-9.542 7 .274.837.68 1.613 1.196 2.296M15.536 15.536A9.953 9.953 0 0112 17c-4.477 0 8.268-2.943 9.542-7a9.953 9.953 0 01-1.196-2.296M9.88 9.88a3 3 0 014.24 4.24' // Eye open path
+      : 'M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-.274.837-.68 1.613-1.196 2.296M15.536 15.536A9.953 9.953 0 0112 17c-4.477 0-8.268-2.943-9.542-7a9.953 9.953 0 011.196-2.296M9.88 9.88a3 3 0 014.24 4.24' // Eye closed path
+  );
+});
     </script>
+</body>
+</html>
+
+<?php require_once('script.php'); ?>
 </body>
 </html>

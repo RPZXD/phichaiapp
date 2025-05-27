@@ -3,7 +3,7 @@
   <!-- Preloader -->
   <div class="preloader flex flex-col justify-center items-center h-screen w-full fixed top-0 left-0 bg-gray-100 z-50">
       <img class="animate-shake h-36 w-36" src="dist/img/logo-phicha.png" alt="AdminLTE Logo">
-      <h3 class="mt-4 text-center"><?php echo $global['pageTitle']; ?></h3>
+      <h3 class="mt-4 text-center"><?php echo $setting->getPageTitle(); ?></h3>
   </div>
 
   <!-- Navbar -->
@@ -11,14 +11,10 @@
     <!-- Left navbar links -->
     <ul class="navbar-nav">
       <li class="nav-item">
-        <a class="nav-link" data-widget="pushmenu" href="#" role="button">
-          <i class="bi bi-list"></i>
-        </a>
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
       </li>
       <li class="nav-item hidden sm:inline-block">
-        <a href="index.php" class="nav-link">
-          <i class="bi bi-house-door"></i> หน้าหลัก
-        </a>
+        <a href="index.php" class="nav-link">หน้าหลัก</a>
       </li>
     </ul>
 
@@ -26,8 +22,8 @@
       <label class="switch-label">
         <input type="checkbox" id="theme-toggle">
         <span class="slider flex items-center justify-between px-1">
-          <i class="bi bi-brightness-high icon-light"></i>
-          <i class="bi bi-moon icon-dark"></i>
+          <i class="icon-light">☀️</i>
+          <i class="icon-dark">🌙</i>
         </span>
       </label>
     </div>
@@ -39,7 +35,7 @@
     <!-- Brand Logo -->
     <a href="index.php" class="brand-link flex items-center">
       <img src="dist/img/logo-phicha.png" alt="AdminLTE Logo" class="brand-image rounded-full opacity-80">
-      <span class="brand-text font-light ml-2"><?php echo $global['nameTitle']; ?></span>
+      <span class="brand-text font-light ml-2"><?php echo $setting->getPageTitleShort(); ?></span>
     </a>
 
     <!-- Sidebar -->

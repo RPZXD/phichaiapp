@@ -1,13 +1,14 @@
 <?php
  session_start(); 
-
+ require_once 'config/Setting.php';
+ $setting = new Setting();
 ?>
 <!DOCTYPE html>
 <html lang="th">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title><?php echo $global['pageTitle'].' | '. $global['nameschool']; ?></title>
+  <title><?php echo $setting->getPageTitle(); ?></title>
 
     <!-- Google Font: Mali -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mali:wght@200;300;400;500;600;700&display=swap">
@@ -39,7 +40,7 @@
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <!-- jQuery UI -->
-    <script src="plugins/jquery-ui/jquery-ui.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
     <!-- jQuery UI CSS (optional, for default styling) -->
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -56,10 +57,37 @@
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
-
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-
-
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              primary: {
+                DEFAULT: '#dc2626', // Red-600
+                light: '#f87171',  // Red-400
+                dark: '#991b1b',   // Red-800
+              },
+              secondary: {
+                DEFAULT: '#facc15', // Yellow-400
+                light: '#fef08a',  // Yellow-200
+                dark: '#ca8a04',   // Yellow-700
+              },
+            },
+            animation: {
+              shake: 'shake 1s infinite',
+            },
+            keyframes: {
+              shake: {
+                '0%, 100%': { transform: 'translateX(0)' },
+                '10%, 30%, 50%, 70%, 90%': { transform: 'translateX(-5px)' },
+                '20%, 40%, 60%, 80%': { transform: 'translateX(5px)' },
+              },
+            },
+          },
+        },
+      }
+    </script>
 
     <style>
     body {
