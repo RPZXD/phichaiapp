@@ -1,15 +1,30 @@
 <?php
 require_once('../../config/Database.php');
+require_once('../../models/User.php');
+require_once('../../models/Role.php');
+require_once('../../models/Department.php');
+// require_once('../../models/Authorization.php');
+// require_once('../../models/PermissionManager.php');
 
 use App\Database;
 
 class UserController {
     private $db;
     private $conn;
+    private $userModel;
+    private $roleModel;
+    private $departmentModel;
+    // private $authModel;
+    // private $permissionModel;
 
     public function __construct() {
         $this->db = new Database();
         $this->conn = $this->db->getConnection();
+        $this->userModel = new User($this->conn);
+        $this->roleModel = new Role($this->conn);
+        $this->departmentModel = new Department($this->conn);
+        // $this->authModel = new Authorization($this->conn);
+        // $this->permissionModel = new PermissionManager($this->conn);
     }
 
     public function handleRequest() {
@@ -20,9 +35,7 @@ class UserController {
         header('Access-Control-Allow-Headers: Content-Type');
 
         // Get the action from GET or POST
-        $action = $_GET['action'] ?? $_POST['action'] ?? '';
-
-        try {            switch ($action) {
+        $action = $_GET['action'] ?? $_POST['action'] ?? '';        try {            switch ($action) {
                 case 'getAll':
                     $this->getAllUsers();
                     break;
@@ -50,6 +63,27 @@ class UserController {
                 case 'getRoleDistribution':
                     $this->getRoleDistribution();
                     break;
+                case 'getDepartments':
+                    $this->getDepartments();
+                    break;
+                case 'getRoles':
+                    $this->getRoles();
+                    break;
+                case 'getUserRoles':
+                    $this->getUserRoles();
+                    break;
+                case 'updateUserRoles':
+                    $this->updateUserRoles();
+                    break;
+                case 'getAssignableRoles':
+                    $this->getAssignableRoles();
+                    break;
+                case 'activateUser':
+                    $this->activateUser();
+                    break;
+                case 'deactivateUser':
+                    $this->deactivateUser();
+                    break;
                 default:
                     $this->sendResponse(false, 'Invalid action', null, 400);
             }
@@ -69,36 +103,67 @@ class UserController {
             // Get role filter
             $role = $_GET['role'] ?? '';
             
-            // Build WHERE clause
+            // Get department filter
+            $department = $_GET['department'] ?? '';
+            
+            // Get status filter
+            $status = $_GET['status'] ?? '';
+            
+            // Build WHERE clause for users view
             $whereConditions = [];
             $params = [];
             
             if (!empty($search)) {
-                $whereConditions[] = "(username LIKE :search OR email LIKE :search OR phone_number LIKE :search)";
+                $whereConditions[] = "(u.username LIKE :search OR u.email LIKE :search OR u.phone_number LIKE :search OR u.employee_id LIKE :search)";
                 $params[':search'] = "%$search%";
             }
             
             if (!empty($role)) {
-                $whereConditions[] = "role = :role";
+                $whereConditions[] = "EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON ur.role_id = r.role_id WHERE ur.user_id = u.user_id AND r.role_name = :role AND ur.is_active = 1)";
                 $params[':role'] = $role;
+            }
+            
+            if (!empty($department)) {
+                $whereConditions[] = "d.department_name = :department";
+                $params[':department'] = $department;
+            }
+            
+            if (!empty($status)) {
+                if ($status === 'active') {
+                    $whereConditions[] = "u.is_active = 1";
+                } else {
+                    $whereConditions[] = "u.is_active = 0";
+                }
             }
             
             $whereClause = !empty($whereConditions) ? 'WHERE ' . implode(' AND ', $whereConditions) : '';
             
             // Get total count
-            $countQuery = "SELECT COUNT(*) as total FROM users $whereClause";
+            $countQuery = "SELECT COUNT(DISTINCT u.user_id) as total 
+                          FROM users u 
+                          LEFT JOIN departments d ON u.department_id = d.department_id 
+                          $whereClause";
             $countStmt = $this->conn->prepare($countQuery);
             foreach ($params as $key => $value) {
                 $countStmt->bindValue($key, $value);
             }
             $countStmt->execute();
             $totalRecords = $countStmt->fetch(PDO::FETCH_ASSOC)['total'];
-            
-            // Get users with pagination
-            $query = "SELECT user_id, username, email, role, phone_number, created_at, updated_at 
-                     FROM users 
+              // Get users with pagination and role information
+            $query = "SELECT DISTINCT 
+                        u.user_id, u.username, u.email, u.employee_id, u.phone_number, 
+                        u.is_active, u.created_at, u.updated_at,
+                        d.department_name,
+                        GROUP_CONCAT(r.role_name ORDER BY r.role_level DESC SEPARATOR ', ') as roles,
+                        COUNT(ur.role_id) as role_count
+                     FROM users u 
+                     LEFT JOIN departments d ON u.department_id = d.department_id
+                     LEFT JOIN user_roles ur ON u.user_id = ur.user_id AND ur.is_active = 1
+                     LEFT JOIN roles r ON ur.role_id = r.role_id
                      $whereClause
-                     ORDER BY user_id DESC 
+                     GROUP BY u.user_id, u.username, u.email, u.employee_id, u.phone_number, 
+                              u.is_active, u.created_at, u.updated_at, d.department_name
+                     ORDER BY u.user_id DESC
                      LIMIT :limit OFFSET :offset";
             
             $stmt = $this->conn->prepare($query);
@@ -114,6 +179,13 @@ class UserController {
             $stmt->execute();
             
             $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            // Format the roles and add additional information
+            foreach ($users as &$user) {
+                $user['roles'] = $user['roles'] ? explode(', ', $user['roles']) : [];
+                $user['is_active'] = (bool)$user['is_active'];
+                $user['role_count'] = (int)$user['role_count'];
+            }
             
             // Calculate pagination info
             $totalPages = ceil($totalRecords / $limit);
@@ -134,9 +206,7 @@ class UserController {
         } catch (Exception $e) {
             $this->sendResponse(false, 'เกิดข้อผิดพลาดในการดึงข้อมูลผู้ใช้: ' . $e->getMessage());
         }
-    }
-
-    private function getUser() {
+    }    private function getUser() {
         try {
             $id = $_GET['id'] ?? null;
             
@@ -145,17 +215,26 @@ class UserController {
                 return;
             }
 
-            $query = "SELECT user_id, username, email, role, phone_number, created_at, updated_at 
-                     FROM users 
-                     WHERE user_id = :id";
-            
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-            $stmt->execute();
-            
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            // Get user data using the enhanced User model
+            $user = $this->userModel->getUserById($id);
             
             if ($user) {
+                // Get user roles
+                $userRoles = $this->userModel->getUserRoles($id);
+                $user['roles'] = $userRoles;
+                  // Get department information
+                if ($user['department_id']) {
+                    $deptQuery = "SELECT department_name, department_description FROM departments WHERE department_id = :dept_id";
+                    $deptStmt = $this->conn->prepare($deptQuery);
+                    $deptStmt->bindParam(':dept_id', $user['department_id']);
+                    $deptStmt->execute();
+                    $department = $deptStmt->fetch(PDO::FETCH_ASSOC);
+                    $user['department'] = $department;
+                }
+                  // Get effective permissions for this user
+                // $permissions = $this->authModel->getUserEffectivePermissions($id);
+                // $user['permissions'] = $permissions;
+                
                 $this->sendResponse(true, 'ดึงข้อมูลผู้ใช้สำเร็จ', $user);
             } else {
                 $this->sendResponse(false, 'ไม่พบผู้ใช้', null, 404);
@@ -163,60 +242,120 @@ class UserController {
         } catch (Exception $e) {
             $this->sendResponse(false, 'เกิดข้อผิดพลาดในการดึงข้อมูลผู้ใช้: ' . $e->getMessage());
         }
-    }
-
-    private function createUser() {
+    }    private function createUser() {
         try {
             $username = $_POST['username'] ?? '';
             $email = $_POST['email'] ?? '';
             $password = $_POST['password'] ?? '';
-            $role = $_POST['role'] ?? '';
+            $roles = $_POST['roles'] ?? []; // Array of role IDs
+            $departmentId = $_POST['department_id'] ?? null;
             $phone_number = $_POST['phone_number'] ?? null;
+            $employeeId = $_POST['employee_id'] ?? null;
 
             // Validate required fields
-            if (empty($username) || empty($email) || empty($password) || empty($role)) {
-                $this->sendResponse(false, 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน', null, 400);
+            if (empty($username) || empty($email) || empty($password)) {
+                $this->sendResponse(false, 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน (ชื่อผู้ใช้, อีเมล, รหัสผ่าน)', null, 400);
+                return;
+            }
+
+            // Validate roles
+            if (empty($roles) || !is_array($roles)) {
+                $this->sendResponse(false, 'กรุณาเลือกบทบาทอย่างน้อย 1 บทบาท', null, 400);
+                return;
+            }
+
+            // Validate password length
+            if (strlen($password) < 6) {
+                $this->sendResponse(false, 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร', null, 400);
                 return;
             }
 
             // Check if username already exists
-            $checkQuery = "SELECT user_id FROM users WHERE username = :username";
-            $checkStmt = $this->conn->prepare($checkQuery);
-            $checkStmt->bindParam(':username', $username);
-            $checkStmt->execute();
-            
-            if ($checkStmt->rowCount() > 0) {
+            if ($this->userModel->usernameExists($username)) {
                 $this->sendResponse(false, 'ชื่อผู้ใช้นี้มีอยู่แล้ว', null, 400);
                 return;
             }
 
             // Check if email already exists
-            $checkEmailQuery = "SELECT user_id FROM users WHERE email = :email";
-            $checkEmailStmt = $this->conn->prepare($checkEmailQuery);
-            $checkEmailStmt->bindParam(':email', $email);
-            $checkEmailStmt->execute();
-            
-            if ($checkEmailStmt->rowCount() > 0) {
+            if ($this->userModel->emailExists($email)) {
                 $this->sendResponse(false, 'อีเมลนี้มีอยู่แล้ว', null, 400);
                 return;
             }
 
-            // Hash password
-            $password_hash = password_hash($password, PASSWORD_DEFAULT);
+            // Check if employee ID already exists (if provided)
+            if ($employeeId && $this->userModel->employeeIdExists($employeeId)) {
+                $this->sendResponse(false, 'รหัสพนักงานนี้มีอยู่แล้ว', null, 400);
+                return;
+            }
 
-            // Insert new user
-            $query = "INSERT INTO users (username, email, password_hash, role, phone_number, created_at, updated_at) 
-                     VALUES (:username, :email, :password_hash, :role, :phone_number, NOW(), NOW())";
+            // Validate department exists
+            if ($departmentId) {
+                $deptQuery = "SELECT department_id FROM departments WHERE department_id = :dept_id";
+                $deptStmt = $this->conn->prepare($deptQuery);
+                $deptStmt->bindParam(':dept_id', $departmentId);
+                $deptStmt->execute();
+                if ($deptStmt->rowCount() === 0) {
+                    $this->sendResponse(false, 'แผนกที่เลือกไม่ถูกต้อง', null, 400);
+                    return;
+                }
+            }
+
+            // Validate roles exist and are assignable
+            $validRoles = [];
+            foreach ($roles as $roleId) {
+                $role = $this->roleModel->getRoleById($roleId);
+                if (!$role) {
+                    $this->sendResponse(false, "บทบาท ID $roleId ไม่ถูกต้อง", null, 400);
+                    return;
+                }
+                if (!$role['is_active']) {
+                    $this->sendResponse(false, "บทบาท {$role['role_name']} ไม่ได้เปิดใช้งาน", null, 400);
+                    return;
+                }
+                $validRoles[] = $role;
+            }
+
+            // Prepare user data
+            $userData = [
+                'username' => $username,
+                'email' => $email,
+                'password' => $password,
+                'department_id' => $departmentId,
+                'phone_number' => $phone_number,
+                'employee_id' => $employeeId,
+                'is_active' => true
+            ];
+
+            // Create user using the enhanced User model
+            $userId = $this->userModel->createUser($userData);
             
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':username', $username);
-            $stmt->bindParam(':email', $email);
-            $stmt->bindParam(':password_hash', $password_hash);
-            $stmt->bindParam(':role', $role);
-            $stmt->bindParam(':phone_number', $phone_number);
-            
-            if ($stmt->execute()) {
-                $this->sendResponse(true, 'เพิ่มผู้ใช้สำเร็จ', ['user_id' => $this->conn->lastInsertId()]);
+            if ($userId) {
+                // Assign roles to the user
+                $roleAssignmentSuccess = true;
+                $assignedRoles = [];
+                
+                foreach ($validRoles as $role) {
+                    $result = $this->userModel->assignRole($userId, $role['role_id']);
+                    if ($result) {
+                        $assignedRoles[] = $role['role_name'];
+                    } else {
+                        $roleAssignmentSuccess = false;
+                        break;
+                    }
+                }
+
+                if ($roleAssignmentSuccess) {
+                    $response = [
+                        'user_id' => $userId,
+                        'username' => $username,
+                        'assigned_roles' => $assignedRoles
+                    ];
+                    $this->sendResponse(true, 'เพิ่มผู้ใช้และกำหนดบทบาทสำเร็จ', $response);
+                } else {
+                    // If role assignment failed, we should clean up the user
+                    $this->userModel->deleteUser($userId);
+                    $this->sendResponse(false, 'เกิดข้อผิดพลาดในการกำหนดบทบาท');
+                }
             } else {
                 $this->sendResponse(false, 'เกิดข้อผิดพลาดในการเพิ่มผู้ใช้');
             }
@@ -228,52 +367,114 @@ class UserController {
             $id = $_POST['user_id'] ?? $_POST['id'] ?? null;
             $username = $_POST['username'] ?? '';
             $email = $_POST['email'] ?? '';
-            $role = $_POST['role'] ?? '';
+            $roles = $_POST['roles'] ?? []; // Array of role IDs
+            $departmentId = $_POST['department_id'] ?? null;
             $phone_number = $_POST['phone_number'] ?? null;
+            $employeeId = $_POST['employee_id'] ?? null;
+            $isActive = isset($_POST['is_active']) ? (bool)$_POST['is_active'] : true;
 
-            if (!$id || empty($username) || empty($email) || empty($role)) {
+            if (!$id || empty($username) || empty($email)) {
                 $this->sendResponse(false, 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน', null, 400);
                 return;
             }
 
+            // Check if user exists
+            $existingUser = $this->userModel->getUserById($id);
+            if (!$existingUser) {
+                $this->sendResponse(false, 'ไม่พบผู้ใช้', null, 404);
+                return;
+            }
+
             // Check if username already exists (excluding current user)
-            $checkQuery = "SELECT user_id FROM users WHERE username = :username AND user_id != :id";
-            $checkStmt = $this->conn->prepare($checkQuery);
-            $checkStmt->bindParam(':username', $username);
-            $checkStmt->bindParam(':id', $id, PDO::PARAM_INT);
-            $checkStmt->execute();
-            
-            if ($checkStmt->rowCount() > 0) {
+            if ($username !== $existingUser['username'] && $this->userModel->usernameExists($username, $id)) {
                 $this->sendResponse(false, 'ชื่อผู้ใช้นี้มีอยู่แล้ว', null, 400);
                 return;
             }
 
             // Check if email already exists (excluding current user)
-            $checkEmailQuery = "SELECT user_id FROM users WHERE email = :email AND user_id != :id";
-            $checkEmailStmt = $this->conn->prepare($checkEmailQuery);
-            $checkEmailStmt->bindParam(':email', $email);
-            $checkEmailStmt->bindParam(':id', $id, PDO::PARAM_INT);
-            $checkEmailStmt->execute();
-            
-            if ($checkEmailStmt->rowCount() > 0) {
+            if ($email !== $existingUser['email'] && $this->userModel->emailExists($email, $id)) {
                 $this->sendResponse(false, 'อีเมลนี้มีอยู่แล้ว', null, 400);
                 return;
             }
 
-            // Update user
-            $query = "UPDATE users 
-                     SET username = :username, email = :email, role = :role, 
-                         phone_number = :phone_number, updated_at = NOW() 
-                     WHERE user_id = :id";
+            // Check if employee ID already exists (excluding current user)
+            if ($employeeId && $employeeId !== $existingUser['employee_id'] && $this->userModel->employeeIdExists($employeeId, $id)) {
+                $this->sendResponse(false, 'รหัสพนักงานนี้มีอยู่แล้ว', null, 400);
+                return;
+            }
+
+            // Validate department exists if provided
+            if ($departmentId) {
+                $deptQuery = "SELECT department_id FROM departments WHERE department_id = :dept_id";
+                $deptStmt = $this->conn->prepare($deptQuery);
+                $deptStmt->bindParam(':dept_id', $departmentId);
+                $deptStmt->execute();
+                if ($deptStmt->rowCount() === 0) {
+                    $this->sendResponse(false, 'แผนกที่เลือกไม่ถูกต้อง', null, 400);
+                    return;
+                }
+            }
+
+            // Validate roles if provided
+            $validRoles = [];
+            if (!empty($roles) && is_array($roles)) {
+                foreach ($roles as $roleId) {
+                    $role = $this->roleModel->getRoleById($roleId);
+                    if (!$role) {
+                        $this->sendResponse(false, "บทบาท ID $roleId ไม่ถูกต้อง", null, 400);
+                        return;
+                    }
+                    if (!$role['is_active']) {
+                        $this->sendResponse(false, "บทบาท {$role['role_name']} ไม่ได้เปิดใช้งาน", null, 400);
+                        return;
+                    }
+                    $validRoles[] = $role;
+                }
+            }
+
+            // Prepare update data
+            $updateData = [
+                'username' => $username,
+                'email' => $email,
+                'department_id' => $departmentId,
+                'phone_number' => $phone_number,
+                'employee_id' => $employeeId,
+                'is_active' => $isActive
+            ];
+
+            // Update user using the enhanced User model
+            $updateResult = $this->userModel->updateUser($id, $updateData);
             
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':username', $username);
-            $stmt->bindParam(':email', $email);
-            $stmt->bindParam(':role', $role);
-            $stmt->bindParam(':phone_number', $phone_number);
-            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-              if ($stmt->execute()) {
-                $this->sendResponse(true, 'อัพเดทข้อมูลผู้ใช้สำเร็จ');
+            if ($updateResult) {
+                $response = ['user_id' => $id];
+                
+                // Update roles if provided
+                if (!empty($validRoles)) {
+                    // Get current roles
+                    $currentRoles = $this->userModel->getUserRoles($id);
+                    $currentRoleIds = array_column($currentRoles, 'role_id');
+                    $newRoleIds = array_column($validRoles, 'role_id');
+                    
+                    // Remove roles that are no longer assigned
+                    foreach ($currentRoleIds as $currentRoleId) {
+                        if (!in_array($currentRoleId, $newRoleIds)) {
+                            $this->userModel->removeRole($id, $currentRoleId);
+                        }
+                    }
+                    
+                    // Add new roles
+                    $assignedRoles = [];
+                    foreach ($validRoles as $role) {
+                        if (!in_array($role['role_id'], $currentRoleIds)) {
+                            $this->userModel->assignRole($id, $role['role_id']);
+                        }
+                        $assignedRoles[] = $role['role_name'];
+                    }
+                    
+                    $response['assigned_roles'] = $assignedRoles;
+                }
+                
+                $this->sendResponse(true, 'อัพเดทข้อมูลผู้ใช้สำเร็จ', $response);
             } else {
                 $this->sendResponse(false, 'เกิดข้อผิดพลาดในการอัพเดทข้อมูลผู้ใช้');
             }
@@ -290,32 +491,24 @@ class UserController {
             }
 
             // Check if user exists
-            $checkQuery = "SELECT user_id FROM users WHERE user_id = :id";
-            $checkStmt = $this->conn->prepare($checkQuery);
-            $checkStmt->bindParam(':id', $id, PDO::PARAM_INT);
-            $checkStmt->execute();
-            
-            if ($checkStmt->rowCount() === 0) {
+            $user = $this->userModel->getUserById($id);
+            if (!$user) {
                 $this->sendResponse(false, 'ไม่พบผู้ใช้', null, 404);
                 return;
             }
 
-            // Delete user
-            $query = "DELETE FROM users WHERE user_id = :id";
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            // Use soft delete from the enhanced User model
+            $deleteResult = $this->userModel->deleteUser($id);
             
-            if ($stmt->execute()) {
-                $this->sendResponse(true, 'ลบผู้ใช้สำเร็จ');
+            if ($deleteResult) {
+                $this->sendResponse(true, 'ลบผู้ใช้สำเร็จ (ระบบจะเก็บข้อมูลไว้สำหรับการตรวจสอบ)');
             } else {
                 $this->sendResponse(false, 'เกิดข้อผิดพลาดในการลบผู้ใช้');
             }
         } catch (Exception $e) {
             $this->sendResponse(false, 'เกิดข้อผิดพลาดในการลบผู้ใช้: ' . $e->getMessage());
         }
-    }
-
-    private function bulkDeleteUsers() {
+    }    private function bulkDeleteUsers() {
         try {
             $userIds = $_POST['user_ids'] ?? [];
             
@@ -331,84 +524,249 @@ class UserController {
                 return;
             }
             
-            // Create placeholders for IN clause
-            $placeholders = str_repeat('?,', count($userIds) - 1) . '?';
+            $deletedCount = 0;
+            $errors = [];
             
-            $query = "DELETE FROM users WHERE user_id IN ($placeholders)";
-            $stmt = $this->conn->prepare($query);
+            // Use soft delete for each user
+            foreach ($userIds as $userId) {
+                try {
+                    $result = $this->userModel->deleteUser($userId);
+                    if ($result) {
+                        $deletedCount++;
+                    } else {
+                        $errors[] = "ไม่สามารถลบผู้ใช้ ID $userId ได้";
+                    }
+                } catch (Exception $e) {
+                    $errors[] = "ข้อผิดพลาดในการลบผู้ใช้ ID $userId: " . $e->getMessage();
+                }
+            }
             
-            if ($stmt->execute($userIds)) {
-                $deletedCount = $stmt->rowCount();
-                $this->sendResponse(true, "ลบผู้ใช้สำเร็จ {$deletedCount} รายการ", ['deleted_count' => $deletedCount]);
+            if ($deletedCount > 0) {
+                $message = "ลบผู้ใช้สำเร็จ {$deletedCount} รายการ";
+                if (!empty($errors)) {
+                    $message .= " (มีข้อผิดพลาด " . count($errors) . " รายการ)";
+                }
+                $this->sendResponse(true, $message, [
+                    'deleted_count' => $deletedCount,
+                    'errors' => $errors
+                ]);
             } else {
-                $this->sendResponse(false, 'เกิดข้อผิดพลาดในการลบผู้ใช้');
+                $this->sendResponse(false, 'ไม่สามารถลบผู้ใช้ได้', ['errors' => $errors]);
             }
         } catch (Exception $e) {
-            $this->sendResponse(false, 'เกิดข้อผิดพลาดในการลบผู้ใช้: ' . $e->getMessage());
+            $this->sendResponse(false, 'เกิดข้อผิดพลาดในการลบผู้ใช้: ' . $e->getMessage());        }
+    }    private function getDepartments() {
+        try {
+            $query = "SELECT department_id, department_code, department_name, department_description, is_active 
+                     FROM departments 
+                     WHERE is_active = 1 
+                     ORDER BY department_name";
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute();
+            $departments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            $this->sendResponse(true, 'ดึงข้อมูลแผนกสำเร็จ', $departments);
+        } catch (Exception $e) {
+            $this->sendResponse(false, 'เกิดข้อผิดพลาดในการดึงข้อมูลแผนก: ' . $e->getMessage());
         }
     }
 
-    private function getStatistics() {
+    private function getRoles() {
         try {
-            // Total users
-            $totalQuery = "SELECT COUNT(*) as total FROM users";
-            $totalStmt = $this->conn->prepare($totalQuery);
-            $totalStmt->execute();
-            $totalUsers = $totalStmt->fetch(PDO::FETCH_ASSOC)['total'];
+            $includeInactive = $_GET['include_inactive'] ?? false;
+            
+            $roles = $this->roleModel->getAllRoles($includeInactive);
+            
+            $this->sendResponse(true, 'ดึงข้อมูลบทบาทสำเร็จ', $roles);
+        } catch (Exception $e) {
+            $this->sendResponse(false, 'เกิดข้อผิดพลาดในการดึงข้อมูลบทบาท: ' . $e->getMessage());
+        }
+    }
 
-            // Active users (assuming users created in last 30 days are active)
-            $activeQuery = "SELECT COUNT(*) as active FROM users WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
-            $activeStmt = $this->conn->prepare($activeQuery);
-            $activeStmt->execute();
-            $activeUsers = $activeStmt->fetch(PDO::FETCH_ASSOC)['active'];
+    private function getUserRoles() {
+        try {
+            $userId = $_GET['user_id'] ?? null;
+            
+            if (!$userId) {
+                $this->sendResponse(false, 'ไม่พบ ID ผู้ใช้', null, 400);
+                return;
+            }
+            
+            $userRoles = $this->userModel->getUserRoles($userId);
+            
+            $this->sendResponse(true, 'ดึงข้อมูลบทบาทของผู้ใช้สำเร็จ', $userRoles);
+        } catch (Exception $e) {
+            $this->sendResponse(false, 'เกิดข้อผิดพลาดในการดึงข้อมูลบทบาทของผู้ใช้: ' . $e->getMessage());
+        }
+    }
 
-            // Admin count
-            $adminQuery = "SELECT COUNT(*) as admins FROM users WHERE role = 'admin'";
-            $adminStmt = $this->conn->prepare($adminQuery);
-            $adminStmt->execute();
-            $adminCount = $adminStmt->fetch(PDO::FETCH_ASSOC)['admins'];
-
-            // New users today
-            $todayQuery = "SELECT COUNT(*) as today FROM users WHERE DATE(created_at) = CURDATE()";
-            $todayStmt = $this->conn->prepare($todayQuery);
-            $todayStmt->execute();
-            $newUsersToday = $todayStmt->fetch(PDO::FETCH_ASSOC)['today'];
-
-            $statistics = [
-                'total_users' => (int)$totalUsers,
-                'active_users' => (int)$activeUsers,
-                'admin_count' => (int)$adminCount,
-                'new_users_today' => (int)$newUsersToday
+    private function updateUserRoles() {
+        try {
+            $userId = $_POST['user_id'] ?? null;
+            $roleIds = $_POST['role_ids'] ?? [];
+            
+            if (!$userId) {
+                $this->sendResponse(false, 'ไม่พบ ID ผู้ใช้', null, 400);
+                return;
+            }
+            
+            if (!is_array($roleIds)) {
+                $this->sendResponse(false, 'รูปแบบข้อมูลบทบาทไม่ถูกต้อง', null, 400);
+                return;
+            }
+            
+            // Check if user exists
+            $user = $this->userModel->getUserById($userId);
+            if (!$user) {
+                $this->sendResponse(false, 'ไม่พบผู้ใช้', null, 404);
+                return;
+            }
+            
+            // Validate all roles exist and are active
+            $validRoles = [];
+            foreach ($roleIds as $roleId) {
+                $role = $this->roleModel->getRoleById($roleId);
+                if (!$role || !$role['is_active']) {
+                    $this->sendResponse(false, "บทบาท ID $roleId ไม่ถูกต้องหรือไม่ได้เปิดใช้งาน", null, 400);
+                    return;
+                }
+                $validRoles[] = $role;
+            }
+            
+            // Get current roles
+            $currentRoles = $this->userModel->getUserRoles($userId);
+            $currentRoleIds = array_column($currentRoles, 'role_id');
+            
+            // Remove roles that are no longer assigned
+            foreach ($currentRoleIds as $currentRoleId) {
+                if (!in_array($currentRoleId, $roleIds)) {
+                    $this->userModel->removeRole($userId, $currentRoleId);
+                }
+            }
+            
+            // Add new roles
+            $assignedRoles = [];
+            foreach ($validRoles as $role) {
+                if (!in_array($role['role_id'], $currentRoleIds)) {
+                    $this->userModel->assignRole($userId, $role['role_id']);
+                }
+                $assignedRoles[] = $role['role_name'];
+            }
+            
+            $response = [
+                'user_id' => $userId,
+                'assigned_roles' => $assignedRoles
             ];
+            
+            $this->sendResponse(true, 'อัพเดทบทบาทของผู้ใช้สำเร็จ', $response);
+        } catch (Exception $e) {
+            $this->sendResponse(false, 'เกิดข้อผิดพลาดในการอัพเดทบทบาทของผู้ใช้: ' . $e->getMessage());
+        }
+    }
+
+    private function getAssignableRoles() {
+        try {
+            $currentUserId = $_SESSION['user']['user_id'] ?? null;
+            
+            if (!$currentUserId) {
+                $this->sendResponse(false, 'ไม่สามารถระบุผู้ใช้ปัจจุบันได้', null, 401);
+                return;
+            }
+            
+            $assignableRoles = $this->roleModel->getAssignableRoles($currentUserId);
+            
+            $this->sendResponse(true, 'ดึงข้อมูลบทบาทที่สามารถกำหนดได้สำเร็จ', $assignableRoles);
+        } catch (Exception $e) {
+            $this->sendResponse(false, 'เกิดข้อผิดพลาดในการดึงข้อมูลบทบาทที่สามารถกำหนดได้: ' . $e->getMessage());
+        }
+    }
+
+    private function activateUser() {
+        try {
+            $userId = $_POST['user_id'] ?? null;
+            
+            if (!$userId) {
+                $this->sendResponse(false, 'ไม่พบ ID ผู้ใช้', null, 400);
+                return;
+            }
+            
+            $result = $this->userModel->activateUser($userId);
+            
+            if ($result) {
+                $this->sendResponse(true, 'เปิดใช้งานผู้ใช้สำเร็จ');
+            } else {
+                $this->sendResponse(false, 'เกิดข้อผิดพลาดในการเปิดใช้งานผู้ใช้');
+            }
+        } catch (Exception $e) {
+            $this->sendResponse(false, 'เกิดข้อผิดพลาดในการเปิดใช้งานผู้ใช้: ' . $e->getMessage());
+        }
+    }
+
+    private function deactivateUser() {
+        try {
+            $userId = $_POST['user_id'] ?? null;
+            
+            if (!$userId) {
+                $this->sendResponse(false, 'ไม่พบ ID ผู้ใช้', null, 400);
+                return;
+            }
+            
+            $result = $this->userModel->deactivateUser($userId);
+            
+            if ($result) {
+                $this->sendResponse(true, 'ปิดใช้งานผู้ใช้สำเร็จ');
+            } else {
+                $this->sendResponse(false, 'เกิดข้อผิดพลาดในการปิดใช้งานผู้ใช้');
+            }
+        } catch (Exception $e) {
+            $this->sendResponse(false, 'เกิดข้อผิดพลาดในการปิดใช้งานผู้ใช้: ' . $e->getMessage());
+        }
+    }    private function getStatistics() {
+        try {
+            // Get statistics using the enhanced User model
+            $statistics = $this->userModel->getUserStatistics();
+            
+            // Additional department statistics
+            $deptQuery = "SELECT COUNT(DISTINCT department_id) as total_departments FROM departments WHERE is_active = 1";
+            $deptStmt = $this->conn->prepare($deptQuery);
+            $deptStmt->execute();
+            $statistics['total_departments'] = (int)$deptStmt->fetch(PDO::FETCH_ASSOC)['total_departments'];
+            
+            // Role statistics
+            $roleQuery = "SELECT COUNT(*) as total_roles FROM roles WHERE is_active = 1";
+            $roleStmt = $this->conn->prepare($roleQuery);
+            $roleStmt->execute();
+            $statistics['total_roles'] = (int)$roleStmt->fetch(PDO::FETCH_ASSOC)['total_roles'];
 
             $this->sendResponse(true, 'ดึงข้อมูลสถิติสำเร็จ', $statistics);
         } catch (Exception $e) {
             $this->sendResponse(false, 'เกิดข้อผิดพลาดในการดึงข้อมูลสถิติ: ' . $e->getMessage());
         }
-    }
-
-    private function getRoleDistribution() {
+    }    private function getRoleDistribution() {
         try {
-            $query = "SELECT role, COUNT(*) as count FROM users GROUP BY role ORDER BY count DESC";
+            // Get role distribution from the new system
+            $query = "SELECT 
+                        r.role_name,
+                        r.display_name,
+                        COUNT(DISTINCT ur.user_id) as user_count
+                     FROM roles r
+                     LEFT JOIN user_roles ur ON r.role_id = ur.role_id AND ur.is_active = 1
+                     LEFT JOIN users u ON ur.user_id = u.user_id AND u.is_active = 1
+                     WHERE r.is_active = 1
+                     GROUP BY r.role_id, r.role_name, r.display_name
+                     ORDER BY user_count DESC, r.hierarchy_level DESC";
+            
             $stmt = $this->conn->prepare($query);
             $stmt->execute();
             $distribution = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // Format role names
-            $roleNames = [
-                'student' => 'นักเรียน',
-                'teacher' => 'ครู',
-                'admin' => 'ผู้ดูแลระบบ',
-                'officer' => 'เจ้าหน้าที่',
-                'director' => 'ผู้อำนวยการ',
-                'vp' => 'รองผู้อำนวยการ',
-                'hod' => 'หัวหน้าแผนก',
-                'parent' => 'ผู้ปกครอง'
-            ];
-
+            // Format the data
             foreach ($distribution as &$item) {
-                $item['role'] = $roleNames[$item['role']] ?? $item['role'];
-            }            $this->sendResponse(true, 'ดึงข้อมูลการกระจายบทบาทสำเร็จ', $distribution);
+                $item['user_count'] = (int)$item['user_count'];
+                $item['role'] = $item['display_name'] ?: $item['role_name'];
+            }
+
+            $this->sendResponse(true, 'ดึงข้อมูลการกระจายบทบาทสำเร็จ', $distribution);
         } catch (Exception $e) {
             $this->sendResponse(false, 'เกิดข้อผิดพลาดในการดึงข้อมูลการกระจายบทบาท: ' . $e->getMessage());
         }

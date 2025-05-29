@@ -382,8 +382,7 @@ require_once('wrapper.php');
         display: block !important;
         animation: slideDown 0.3s ease-out;
     }
-    
-    @keyframes slideDown {
+      @keyframes slideDown {
         from {
             opacity: 0;
             transform: translateY(-10px);
@@ -392,6 +391,37 @@ require_once('wrapper.php');
             opacity: 1;
             transform: translateY(0);
         }
+    }
+    
+    /* Toggle Switch Styles */
+    .toggle-switch {
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .toggle-switch.active {
+        background-color: #3b82f6 !important;
+    }
+    
+    .toggle-switch.active:after {
+        transform: translateX(100%);
+        background-color: white;
+    }
+    
+    /* Multi-role checkbox styles */
+    .role-checkbox {
+        transition: all 0.2s ease;
+    }
+    
+    .role-checkbox:checked + .role-label {
+        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+        border-color: #3b82f6;
+        transform: scale(1.02);
+    }
+    
+    .dark .role-checkbox:checked + .role-label {
+        background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%);
+        border-color: #60a5fa;
     }
 </style>
 <div class="content-wrapper min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -500,21 +530,22 @@ require_once('wrapper.php');
                         <div>
                             <h2 class="text-2xl font-bold text-white mb-1">รายการผู้ใช้งานทั้งหมด</h2>
                             <p class="text-indigo-100">จัดการข้อมูลผู้ใช้และกำหนดสิทธิ์การเข้าถึง</p>
-                        </div>
-                        <div class="flex gap-3 flex-wrap">
+                        </div>                        <div class="flex gap-3 flex-wrap">
                             <select id="roleFilter" class="px-4 py-3 border-0 rounded-xl bg-white/20 backdrop-blur-sm text-white placeholder-white/70 focus:ring-2 focus:ring-white/50 transition-all duration-300">
                                 <option value="" class="text-gray-800">ทุกบทบาท</option>
-                                <option value="student" class="text-gray-800">🎓 นักเรียน</option>
-                                <option value="teacher" class="text-gray-800">👨‍🏫 ครู</option>
-                                <option value="admin" class="text-gray-800">🛡️ ผู้ดูแลระบบ</option>
-                                <option value="officer" class="text-gray-800">👔 เจ้าหน้าที่</option>
-                                <option value="director" class="text-gray-800">🎯 ผู้อำนวยการ</option>
-                                <option value="vp" class="text-gray-800">⭐ รองผู้อำนวยการ</option>
-                                <option value="hod" class="text-gray-800">📊 หัวหน้าแผนก</option>
-                                <option value="parent" class="text-gray-800">👨‍👩‍👧‍👦 ผู้ปกครอง</option>
+                                <!-- Roles will be populated dynamically -->
+                            </select>
+                            <select id="departmentFilter" class="px-4 py-3 border-0 rounded-xl bg-white/20 backdrop-blur-sm text-white placeholder-white/70 focus:ring-2 focus:ring-white/50 transition-all duration-300">
+                                <option value="" class="text-gray-800">ทุกแผนก</option>
+                                <!-- Departments will be populated dynamically -->
+                            </select>
+                            <select id="statusFilter" class="px-4 py-3 border-0 rounded-xl bg-white/20 backdrop-blur-sm text-white placeholder-white/70 focus:ring-2 focus:ring-white/50 transition-all duration-300">
+                                <option value="" class="text-gray-800">ทุกสถานะ</option>
+                                <option value="active" class="text-gray-800">🟢 ใช้งาน</option>
+                                <option value="inactive" class="text-gray-800">🔴 ไม่ใช้งาน</option>
                             </select>
                             <button id="refreshBtn" class="bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white px-6 py-3 rounded-xl font-semibold shadow-lg transition-all duration-300 flex items-center btn-glow">
-                                <i class="fas fa-sync-alt mr-2 animate-spin"></i>รีเฟรช
+                                <i class="fas fa-sync-alt mr-2"></i>รีเฟรช
                             </button>
                             <button id="addUserBtn" class="bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white px-6 py-3 rounded-xl font-semibold shadow-lg transition-all duration-300 flex items-center btn-glow transform hover:scale-105">
                                 <i class="fas fa-plus mr-2"></i>เพิ่มผู้ใช้งาน
@@ -537,12 +568,20 @@ require_once('wrapper.php');
                                     </th>
                                     <th class="border-0 px-6 py-4 text-left font-semibold text-gray-700">
                                         <i class="fas fa-envelope mr-2 text-purple-500"></i>อีเมล
-                                    </th>
-                                    <th class="border-0 px-6 py-4 text-left font-semibold text-gray-700">
+                                    </th>                                    <th class="border-0 px-6 py-4 text-left font-semibold text-gray-700">
                                         <i class="fas fa-user-tag mr-2 text-orange-500"></i>บทบาท
                                     </th>
                                     <th class="border-0 px-6 py-4 text-left font-semibold text-gray-700">
+                                        <i class="fas fa-building mr-2 text-purple-500"></i>แผนก
+                                    </th>
+                                    <th class="border-0 px-6 py-4 text-left font-semibold text-gray-700">
+                                        <i class="fas fa-id-card mr-2 text-blue-500"></i>รหัสพนักงาน
+                                    </th>
+                                    <th class="border-0 px-6 py-4 text-left font-semibold text-gray-700">
                                         <i class="fas fa-phone mr-2 text-teal-500"></i>เบอร์โทรศัพท์
+                                    </th>
+                                    <th class="border-0 px-6 py-4 text-left font-semibold text-gray-700">
+                                        <i class="fas fa-toggle-on mr-2 text-green-500"></i>สถานะ
                                     </th>
                                     <th class="border-0 px-6 py-4 text-left font-semibold text-gray-700">
                                         <i class="fas fa-calendar mr-2 text-indigo-500"></i>วันที่สร้าง
@@ -569,8 +608,7 @@ require_once('wrapper.php');
                 <button type="button" onclick="userManager.hideUserModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" aria-label="ปิด">
                     <i class="fas fa-times text-xl"></i>
                 </button>
-            </div>
-            <form id="userForm" class="space-y-4">
+            </div>            <form id="userForm" class="space-y-4">
                 <div>
                     <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         ชื่อผู้ใช้งาน <span class="text-red-500">*</span>
@@ -583,6 +621,12 @@ require_once('wrapper.php');
                     </label>
                     <input type="email" id="email" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="กรอกอีเมล">
                 </div>
+                <div>
+                    <label for="employee_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        รหัสพนักงาน
+                    </label>
+                    <input type="text" id="employee_id" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="กรอกรหัสพนักงาน">
+                </div>
                 <div id="passwordField">
                     <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         รหัสผ่าน <span class="text-red-500">*</span>
@@ -590,24 +634,39 @@ require_once('wrapper.php');
                     <input type="password" id="password" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="กรอกรหัสผ่าน">
                 </div>
                 <div>
-                    <label for="role" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <label for="department" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        แผนก
+                    </label>
+                    <select id="department" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                        <option value="">-- เลือกแผนก --</option>
+                        <!-- Departments will be populated dynamically -->
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         บทบาท <span class="text-red-500">*</span>
                     </label>
-                    <select id="role" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                        <option value="">-- เลือกบทบาท --</option>
-                        <option value="student">นักเรียน</option>
-                        <option value="teacher">ครู</option>
-                        <option value="admin">ผู้ดูแลระบบ</option>
-                        <option value="officer">เจ้าหน้าที่</option>
-                        <option value="director">ผู้อำนวยการ</option>
-                        <option value="vp">รองผู้อำนวยการ</option>
-                        <option value="hod">หัวหน้าแผนก</option>
-                        <option value="parent">ผู้ปกครอง</option>
-                    </select>
+                    <div id="rolesContainer" class="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-3 bg-gray-50 dark:bg-gray-700">
+                        <div class="text-center text-gray-500 py-4">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p class="mt-2">กำลังโหลดบทบาท...</p>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">เลือกได้หลายบทบาท</p>
                 </div>
                 <div>
                     <label for="phone_number" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">เบอร์โทรศัพท์</label>
                     <input type="tel" id="phone_number" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="กรอกเบอร์โทรศัพท์">
+                </div>
+                <div id="statusField" class="hidden">
+                    <label class="flex items-center space-x-3">
+                        <span class="text-sm font-medium text-gray-700 dark:text-gray-300">สถานะการใช้งาน</span>
+                        <div class="relative">
+                            <input type="checkbox" id="is_active" class="sr-only">
+                            <div class="w-10 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600 toggle-switch" onclick="userManager.toggleStatus()"></div>
+                        </div>
+                        <span id="statusText" class="text-sm text-gray-600 dark:text-gray-400">ใช้งาน</span>
+                    </label>
                 </div>
             </form>
             <div class="flex justify-end gap-3 mt-6">

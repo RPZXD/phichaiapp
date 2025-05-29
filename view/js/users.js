@@ -1,4 +1,4 @@
-// User Management JavaScript with Tailwind CSS and Interactive Features
+// User Management JavaScript with Enhanced Multi-Role Support
 class UserManager {
     constructor() {
         this.table = null;
@@ -6,16 +6,111 @@ class UserManager {
         this.currentChart = null;
         this.statisticsData = {};
         this.selectedBulkUsers = new Set();
+        this.departments = [];
+        this.roles = [];
+        this.currentUserStatus = true;
         this.init();
     }
 
     init() {
+        this.loadInitialData();
         this.initDataTable();
         this.bindEvents();
         this.loadUsers();
         this.loadStatistics();
         this.loadUserRoleChart();
         this.initAnimations();
+    }
+
+    // Load initial data (departments, roles)
+    async loadInitialData() {
+        try {
+            // Load departments
+            const deptResponse = await fetch('api/UserController.php?action=getDepartments');
+            const deptResult = await deptResponse.json();
+            if (deptResult.success) {
+                this.departments = deptResult.data;
+                this.populateDepartmentFilters();
+            }
+
+            // Load roles
+            const rolesResponse = await fetch('api/UserController.php?action=getRoles');
+            const rolesResult = await rolesResponse.json();
+            if (rolesResult.success) {
+                this.roles = rolesResult.data;
+                this.populateRoleFilters();
+                this.populateRoleCheckboxes();
+            }
+        } catch (error) {
+            console.error('Error loading initial data:', error);
+        }
+    }
+
+    // Populate department filters
+    populateDepartmentFilters() {
+        const departmentFilter = $('#departmentFilter');
+        const departmentSelect = $('#department');
+        
+        // Clear existing options (except first)
+        departmentFilter.find('option:not(:first)').remove();
+        departmentSelect.find('option:not(:first)').remove();
+        
+        this.departments.forEach(dept => {
+            const option = `<option value="${dept.id}">${dept.name}</option>`;
+            departmentFilter.append(option);
+            departmentSelect.append(option);
+        });
+    }
+
+    // Populate role filters
+    populateRoleFilters() {
+        const roleFilter = $('#roleFilter');
+        
+        // Clear existing options (except first)
+        roleFilter.find('option:not(:first)').remove();
+        
+        this.roles.forEach(role => {
+            const option = `<option value="${role.id}">${role.display_name}</option>`;
+            roleFilter.append(option);
+        });
+    }
+
+    // Populate role checkboxes in form
+    populateRoleCheckboxes() {
+        const rolesContainer = $('#rolesContainer');
+        rolesContainer.empty();
+        
+        this.roles.forEach(role => {
+            const roleItem = `
+                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors role-label">
+                    <input type="checkbox" value="${role.id}" name="userRoles" class="role-checkbox mr-3 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                    <div class="flex-1">
+                        <div class="font-medium text-gray-900 dark:text-white">${role.display_name}</div>
+                        <div class="text-sm text-gray-500 dark:text-gray-400">${role.description}</div>
+                    </div>
+                </label>
+            `;
+            rolesContainer.append(roleItem);
+        });
+    }
+
+    // Toggle user status in form
+    toggleStatus() {
+        const toggleSwitch = $('.toggle-switch');
+        const statusText = $('#statusText');
+        const isActiveCheckbox = $('#is_active');
+        
+        this.currentUserStatus = !this.currentUserStatus;
+        
+        if (this.currentUserStatus) {
+            toggleSwitch.addClass('active');
+            statusText.text('ใช้งาน').removeClass('text-red-600').addClass('text-green-600');
+            isActiveCheckbox.prop('checked', true);
+        } else {
+            toggleSwitch.removeClass('active');
+            statusText.text('ไม่ใช้งาน').removeClass('text-green-600').addClass('text-red-600');
+            isActiveCheckbox.prop('checked', false);
+        }
     }
 
     // Initialize animations and UI effects
@@ -154,7 +249,7 @@ class UserManager {
                 }
             }
         });
-    }initDataTable() {
+    }    initDataTable() {
         this.table = $('#usersTable').DataTable({
             responsive: true,
             processing: true,
@@ -169,7 +264,9 @@ class UserManager {
                         page: Math.floor(d.start / d.length) + 1,
                         limit: d.length,
                         search: d.search.value,
-                        role: $('#roleFilter').val() || ''
+                        role: $('#roleFilter').val() || '',
+                        department: $('#departmentFilter').val() || '',
+                        status: $('#statusFilter').val() || ''
                     };
                 },
                 dataSrc: function(json) {
@@ -204,11 +301,26 @@ class UserManager {
                 { data: 'username', title: 'ชื่อผู้ใช้' },
                 { data: 'email', title: 'อีเมล' },
                 { 
-                    data: 'role', 
+                    data: 'roles', 
                     title: 'บทบาท',
-                    render: (data) => this.formatRole(data)
+                    render: (data) => this.formatRoles(data)
+                },
+                { 
+                    data: 'department_name', 
+                    title: 'แผนก',
+                    render: (data) => data || '-'
+                },
+                { 
+                    data: 'employee_id', 
+                    title: 'รหัสพนักงาน',
+                    render: (data) => data || '-'
                 },
                 { data: 'phone_number', title: 'เบอร์โทรศัพท์' },
+                { 
+                    data: 'is_active', 
+                    title: 'สถานะ',
+                    render: (data) => this.formatStatus(data)
+                },
                 { 
                     data: 'created_at', 
                     title: 'วันที่สร้าง',
@@ -224,9 +336,7 @@ class UserManager {
             order: [[0, 'ASC']],
             ordering: true,
         });
-    }
-
-    bindEvents() {
+    }    bindEvents() {
         // Add user button
         $('#addUserBtn').on('click', () => this.showAddUserModal());
         
@@ -236,8 +346,10 @@ class UserManager {
         // Refresh button
         $('#refreshBtn').on('click', () => this.loadUsers());
         
-        // Role filter
-        $('#roleFilter').on('change', () => this.filterByRole());
+        // Filters
+        $('#roleFilter').on('change', () => this.applyFilters());
+        $('#departmentFilter').on('change', () => this.applyFilters());
+        $('#statusFilter').on('change', () => this.applyFilters());
         
         // Form submit
         $('#userForm').on('submit', (e) => {
@@ -251,20 +363,29 @@ class UserManager {
                 this.hideUserModal();
             }
         });
-    }    async loadUsers() {
+    }async loadUsers() {
         // With server-side processing, DataTables handles data loading
         // We just need to trigger a reload
         if (this.table) {
             this.table.ajax.reload(null, false);
         }
-    }
-
-    showAddUserModal() {
+    }    showAddUserModal() {
         this.editingUserId = null;
         $('#modalTitle').text('เพิ่มผู้ใช้งานใหม่');
         $('#userForm')[0].reset();
         $('#passwordField').show();
         $('#password').prop('required', true);
+        $('#statusField').addClass('hidden');
+        
+        // Reset role checkboxes
+        $('input[name="userRoles"]').prop('checked', false);
+        
+        // Reset toggle switch
+        this.currentUserStatus = true;
+        $('.toggle-switch').addClass('active');
+        $('#statusText').text('ใช้งาน').removeClass('text-red-600').addClass('text-green-600');
+        $('#is_active').prop('checked', true);
+        
         this.showUserModal();
     }
 
@@ -273,6 +394,7 @@ class UserManager {
         $('#modalTitle').text('แก้ไขข้อมูลผู้ใช้งาน');
         $('#passwordField').hide();
         $('#password').prop('required', false);
+        $('#statusField').removeClass('hidden');
         
         // Load user data
         this.loadUserData(userId);
@@ -288,14 +410,49 @@ class UserManager {
                 const user = result.data;
                 $('#username').val(user.username);
                 $('#email').val(user.email);
-                $('#role').val(user.role);
+                $('#employee_id').val(user.employee_id || '');
+                $('#department').val(user.department_id || '');
                 $('#phone_number').val(user.phone_number || '');
+                
+                // Set user status
+                this.currentUserStatus = user.is_active == 1;
+                if (this.currentUserStatus) {
+                    $('.toggle-switch').addClass('active');
+                    $('#statusText').text('ใช้งาน').removeClass('text-red-600').addClass('text-green-600');
+                } else {
+                    $('.toggle-switch').removeClass('active');
+                    $('#statusText').text('ไม่ใช้งาน').removeClass('text-green-600').addClass('text-red-600');
+                }
+                $('#is_active').prop('checked', this.currentUserStatus);
+                
+                // Load and set user roles
+                await this.loadUserRoles(userId);
+                
             } else {
                 this.showError(result.message || 'เกิดข้อผิดพลาดในการโหลดข้อมูลผู้ใช้');
             }
         } catch (error) {
             console.error('Error loading user data:', error);
             this.showError('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+        }
+    }
+
+    async loadUserRoles(userId) {
+        try {
+            const response = await fetch(`api/UserController.php?action=getUserRoles&user_id=${userId}`);
+            const result = await response.json();
+            
+            if (result.success) {
+                // Reset all checkboxes
+                $('input[name="userRoles"]').prop('checked', false);
+                
+                // Check the user's roles
+                result.data.forEach(roleId => {
+                    $(`input[name="userRoles"][value="${roleId}"]`).prop('checked', true);
+                });
+            }
+        } catch (error) {
+            console.error('Error loading user roles:', error);
         }
     }
 
@@ -307,12 +464,20 @@ class UserManager {
         $('#userModal').addClass('hidden');
         $('#userForm')[0].reset();
         this.editingUserId = null;
-    }
-
-    async saveUser() {
+    }    async saveUser() {
         const form = $('#userForm')[0];
         if (!form.checkValidity()) {
             form.reportValidity();
+            return;
+        }
+
+        // Validate role selection
+        const selectedRoles = $('input[name="userRoles"]:checked').map(function() {
+            return $(this).val();
+        }).get();
+
+        if (selectedRoles.length === 0) {
+            this.showError('กรุณาเลือกบทบาทอย่างน้อย 1 บทบาท');
             return;
         }
 
@@ -322,12 +487,16 @@ class UserManager {
         formData.append('action', action);
         formData.append('username', $('#username').val());
         formData.append('email', $('#email').val());
-        formData.append('role', $('#role').val());
+        formData.append('employee_id', $('#employee_id').val());
+        formData.append('department_id', $('#department').val());
         formData.append('phone_number', $('#phone_number').val());
-          if (action === 'create') {
+        formData.append('roles', JSON.stringify(selectedRoles));
+        
+        if (action === 'create') {
             formData.append('password', $('#password').val());
         } else {
             formData.append('user_id', this.editingUserId);
+            formData.append('is_active', this.currentUserStatus ? 1 : 0);
         }
 
         try {
@@ -395,9 +564,46 @@ class UserManager {
                 this.hideLoading();
             }
         }
-    }    filterByRole() {
+    }    // Apply all filters
+    applyFilters() {
         // With server-side processing, we reload the table data
         this.table.ajax.reload();
+    }
+
+    // Format multiple roles for display
+    formatRoles(roles) {
+        if (!roles || roles.length === 0) {
+            return '<span class="text-gray-500">ไม่มีบทบาท</span>';
+        }
+        
+        return roles.map(role => {
+            const colors = this.getRoleColor(role.name);
+            return `<span class="inline-block px-2 py-1 text-xs rounded-full mr-1 mb-1 ${colors}">${role.display_name}</span>`;
+        }).join('');
+    }
+
+    // Get role color for badges
+    getRoleColor(roleName) {
+        const colorMap = {
+            'admin': 'bg-red-100 text-red-800',
+            'director': 'bg-purple-100 text-purple-800',
+            'vp': 'bg-indigo-100 text-indigo-800',
+            'hod': 'bg-blue-100 text-blue-800',
+            'teacher': 'bg-green-100 text-green-800',
+            'officer': 'bg-yellow-100 text-yellow-800',
+            'student': 'bg-gray-100 text-gray-800',
+            'parent': 'bg-pink-100 text-pink-800'
+        };
+        return colorMap[roleName] || 'bg-gray-100 text-gray-800';
+    }
+
+    // Format user status
+    formatStatus(isActive) {
+        if (isActive == 1) {
+            return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><span class="w-2 h-2 mr-1 bg-green-400 rounded-full"></span>ใช้งาน</span>';
+        } else {
+            return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><span class="w-2 h-2 mr-1 bg-red-400 rounded-full"></span>ไม่ใช้งาน</span>';
+        }
     }
 
     formatRole(role) {
@@ -425,8 +631,21 @@ class UserManager {
             minute: '2-digit'
         });
     }    renderActions(row) {
-        const eligibleRoles = ['teacher', 'director', 'vp', 'hod', 'officer', 'admin'];
-        const hasPermissionManagement = eligibleRoles.includes(row.role);
+        const hasPermissionManagement = row.roles && row.roles.some(role => 
+            ['teacher', 'director', 'vp', 'hod', 'officer', 'admin'].includes(role.name)
+        );
+        
+        const statusAction = row.is_active == 1 ? 
+            `<button onclick="userManager.toggleUserStatus(${row.user_id}, 0, '${row.username}')" 
+                    class="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded text-sm transition transform hover:scale-105"
+                    title="ปิดการใช้งาน">
+                <i class="fas fa-user-slash"></i> ปิด
+            </button>` :
+            `<button onclick="userManager.toggleUserStatus(${row.user_id}, 1, '${row.username}')" 
+                    class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm transition transform hover:scale-105"
+                    title="เปิดการใช้งาน">
+                <i class="fas fa-user-check"></i> เปิด
+            </button>`;
         
         return `
             <div class="flex gap-2 justify-center flex-wrap">
@@ -436,12 +655,13 @@ class UserManager {
                     <i class="fas fa-edit"></i> แก้ไข
                 </button>
                 ${hasPermissionManagement ? `
-                <button onclick="userManager.showPermissionModal(${row.user_id}, '${row.username}', '${row.role}')" 
+                <button onclick="userManager.showPermissionModal(${row.user_id}, '${row.username}', '${row.roles ? row.roles.map(r => r.name).join(',') : ''}')" 
                         class="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded text-sm transition transform hover:scale-105"
                         title="จัดการสิทธิ์">
                     <i class="fas fa-user-shield"></i> สิทธิ์
                 </button>
                 ` : ''}
+                ${statusAction}
                 <button onclick="userManager.showResetPasswordModal(${row.user_id}, '${row.username}')" 
                         class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm transition transform hover:scale-105"
                         title="รีเซ็ตรหัสผ่าน">
@@ -454,6 +674,50 @@ class UserManager {
                 </button>
             </div>
         `;
+    }
+
+    // Toggle user status (activate/deactivate)
+    async toggleUserStatus(userId, status, username) {
+        const action = status == 1 ? 'เปิดการใช้งาน' : 'ปิดการใช้งาน';
+        const result = await Swal.fire({
+            title: `${action}ผู้ใช้งาน`,
+            text: `ต้องการ${action}ผู้ใช้งาน "${username}" หรือไม่?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: status == 1 ? '#10b981' : '#f59e0b',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: action,
+            cancelButtonText: 'ยกเลิก'
+        });
+
+        if (result.isConfirmed) {
+            try {
+                this.showLoading();
+                const formData = new FormData();
+                formData.append('action', status == 1 ? 'activateUser' : 'deactivateUser');
+                formData.append('user_id', userId);
+
+                const response = await fetch('api/UserController.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const toggleResult = await response.json();
+                
+                if (toggleResult.success) {
+                    this.showSuccess(toggleResult.message);
+                    this.loadUsers();
+                    this.loadStatistics();
+                } else {
+                    this.showError(toggleResult.message || `เกิดข้อผิดพลาดในการ${action}ผู้ใช้งาน`);
+                }
+            } catch (error) {
+                console.error('Error toggling user status:', error);
+                this.showError('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+            } finally {
+                this.hideLoading();
+            }
+        }
     }
 
     showLoading() {
