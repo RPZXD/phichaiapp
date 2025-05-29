@@ -1,6 +1,6 @@
 <?php
  session_start(); 
- require_once '../config/Setting.php';
+ require_once(__DIR__ . '/../config/Setting.php');
  $setting = new Setting();
 ?>
 <!DOCTYPE html>

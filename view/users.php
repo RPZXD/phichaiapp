@@ -790,6 +790,90 @@ require_once('wrapper.php');
         </div>
     </div>
 </div>
+
+<!-- Permission Management Quick Modal -->
+<div id="permissionQuickModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-gray-600 bg-opacity-50 backdrop-blur-sm">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="relative w-full max-w-md mx-auto">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <!-- Header -->
+                <div class="bg-gradient-to-r from-purple-500 to-indigo-600 px-6 py-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="bg-white bg-opacity-20 rounded-full p-2 mr-3">
+                                <i class="fas fa-user-shield text-white text-lg"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-white">จัดการสิทธิ์ผู้ใช้</h3>
+                                <p class="text-purple-100 text-sm">กำหนดสิทธิ์การเข้าถึงระบบ</p>
+                            </div>
+                        </div>
+                        <button type="button" 
+                                onclick="userManager.hidePermissionModal()" 
+                                class="text-white hover:text-purple-200 transition-colors duration-200 p-2 hover:bg-white hover:bg-opacity-20 rounded-full">
+                            <i class="fas fa-times text-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Content -->
+                <div class="p-6 space-y-6">
+                    <!-- User Info -->
+                    <div class="bg-purple-50 dark:bg-purple-900 dark:bg-opacity-30 rounded-lg p-4">
+                        <h4 class="font-semibold text-gray-800 dark:text-white mb-2">ข้อมูลผู้ใช้</h4>
+                        <div class="space-y-1 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600 dark:text-gray-400">ชื่อผู้ใช้:</span>
+                                <span id="permModalUsername" class="font-medium text-gray-800 dark:text-white"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600 dark:text-gray-400">บทบาท:</span>
+                                <span id="permModalRole" class="font-medium text-gray-800 dark:text-white"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Permission Summary -->
+                    <div id="permissionSummary" class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                        <h4 class="font-semibold text-gray-800 dark:text-white mb-2">สรุปสิทธิ์ปัจจุบัน</h4>
+                        <div class="text-center py-4">
+                            <i class="fas fa-spinner fa-spin text-gray-400 text-2xl"></i>
+                            <p class="text-gray-500 mt-2">กำลังโหลดข้อมูลสิทธิ์...</p>
+                        </div>
+                    </div>
+
+                    <!-- Action Info -->
+                    <div class="bg-blue-50 dark:bg-blue-900 dark:bg-opacity-30 rounded-lg p-4">
+                        <div class="flex items-start">
+                            <i class="fas fa-info-circle text-blue-500 mt-0.5 mr-3"></i>
+                            <div class="text-sm text-blue-700 dark:text-blue-300">
+                                <p class="font-medium mb-1">หมายเหตุ:</p>
+                                <p>การจัดการสิทธิ์แบบละเอียดจะเปิดในหน้าจัดการสิทธิ์แยกต่างหาก ซึ่งมีเครื่องมือครบครันสำหรับการกำหนดสิทธิ์ตามโมดูลและฝ่ายงาน</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="bg-gray-50 dark:bg-gray-700 px-6 py-4">
+                    <div class="flex gap-3">
+                        <button type="button" 
+                                onclick="userManager.hidePermissionModal()" 
+                                class="flex-1 bg-gray-500 hover:bg-gray-600 text-white px-4 py-2.5 rounded-lg font-medium transition-colors duration-200">
+                            <i class="fas fa-times mr-2"></i>ปิด
+                        </button>
+                        <button type="button" 
+                                onclick="userManager.goToPermissionManagement()" 
+                                class="flex-1 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white px-4 py-2.5 rounded-lg font-medium transition-all duration-200 transform hover:scale-105 shadow-lg">
+                            <i class="fas fa-user-shield mr-2"></i>จัดการสิทธิ์
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?php require_once('../footer.php'); ?>
 <?php require_once('script.php'); ?>
 <script src="js/users.js" defer></script>

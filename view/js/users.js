@@ -425,6 +425,9 @@ class UserManager {
             minute: '2-digit'
         });
     }    renderActions(row) {
+        const eligibleRoles = ['teacher', 'director', 'vp', 'hod', 'officer', 'admin'];
+        const hasPermissionManagement = eligibleRoles.includes(row.role);
+        
         return `
             <div class="flex gap-2 justify-center flex-wrap">
                 <button onclick="userManager.showEditUserModal(${row.user_id})" 
@@ -432,6 +435,13 @@ class UserManager {
                         title="แก้ไขข้อมูลผู้ใช้">
                     <i class="fas fa-edit"></i> แก้ไข
                 </button>
+                ${hasPermissionManagement ? `
+                <button onclick="userManager.showPermissionModal(${row.user_id}, '${row.username}', '${row.role}')" 
+                        class="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded text-sm transition transform hover:scale-105"
+                        title="จัดการสิทธิ์">
+                    <i class="fas fa-user-shield"></i> สิทธิ์
+                </button>
+                ` : ''}
                 <button onclick="userManager.showResetPasswordModal(${row.user_id}, '${row.username}')" 
                         class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm transition transform hover:scale-105"
                         title="รีเซ็ตรหัสผ่าน">
@@ -658,6 +668,55 @@ class UserManager {
             console.error('Reset password error:', error);
             this.showError('เกิดข้อผิดพลาดในการเชื่อมต่อ');
         }
+    }
+
+    // Show permission management modal
+    showPermissionModal(userId, username, role) {
+        // Show confirmation before redirecting
+        Swal.fire({
+            title: 'จัดการสิทธิ์ผู้ใช้',
+            html: `
+                <div class="text-left">
+                    <p><strong>ผู้ใช้:</strong> ${username}</p>
+                    <p><strong>บทบาท:</strong> ${this.getRoleDisplayName(role)}</p>
+                    <p class="mt-3">คุณต้องการเปิดหน้าจัดการสิทธิ์หรือไม่?</p>
+                </div>
+            `,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#8B5CF6',
+            cancelButtonColor: '#6B7280',
+            confirmButtonText: '<i class="fas fa-user-shield"></i> เปิดหน้าจัดการสิทธิ์',
+            cancelButtonText: 'ยกเลิก',
+            customClass: {
+                confirmButton: 'btn btn-purple',
+                cancelButton: 'btn btn-gray'
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Store selected user data and redirect to roles page
+                sessionStorage.setItem('selectedUserForPermission', JSON.stringify({
+                    userId: userId,
+                    username: username,
+                    role: role
+                }));
+                window.location.href = 'roles.php';
+            }
+        });
+    }
+
+    getRoleDisplayName(role) {
+        const roleNames = {
+            'admin': 'ผู้ดูแลระบบ',
+            'director': 'ผู้อำนวยการ',
+            'vp': 'รองผู้อำนวยการ',
+            'hod': 'หัวหน้าฝ่าย',
+            'officer': 'เจ้าหน้าที่',
+            'teacher': 'ครู',
+            'student': 'นักเรียน',
+            'parent': 'ผู้ปกครอง'
+        };
+        return roleNames[role] || role;
     }
 }
 
